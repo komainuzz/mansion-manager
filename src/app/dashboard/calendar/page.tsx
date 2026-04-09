@@ -1,0 +1,25 @@
+import { supabase } from '@/lib/supabase'
+import type { Room, Reservation } from '@/types'
+import GanttCalendar from '@/components/calendar/GanttCalendar'
+
+export const dynamic = 'force-dynamic'
+
+export default async function CalendarPage() {
+  const [{ data: rooms }, { data: reservations }] = await Promise.all([
+    supabase.from('rooms').select('*').order('name'),
+    supabase.from('reservations').select('*').order('check_in'),
+  ])
+
+  return (
+    <div className="p-6 space-y-5">
+      <div>
+        <h2 className="text-2xl font-bold text-gray-900">稼働カレンダー</h2>
+        <p className="text-sm text-gray-500 mt-0.5">35日間のガントチャート表示</p>
+      </div>
+      <GanttCalendar
+        rooms={(rooms ?? []) as Room[]}
+        reservations={(reservations ?? []) as Reservation[]}
+      />
+    </div>
+  )
+}
