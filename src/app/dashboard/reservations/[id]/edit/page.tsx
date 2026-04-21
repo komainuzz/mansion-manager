@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic'
 export default async function EditReservationPage({ params }: { params: { id: string } }) {
   const [{ data: reservation }, { data: rooms }] = await Promise.all([
     supabase.from('reservations').select('*').eq('id', params.id).single(),
-    supabase.from('rooms').select('*').order('name'),
+    supabase.from('rooms').select('*').order('building_name'),
   ])
 
   if (!reservation) notFound()

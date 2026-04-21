@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import type { Room, Reservation, ChecklistItem } from '@/types'
+import { roomDisplayName } from '@/lib/utils'
 
 const DEFAULT_CHECKLIST: ChecklistItem[] = [
   { label: '鍵の返却', checked: false },
@@ -26,10 +27,13 @@ export default function ReservationForm({ rooms, reservation, defaultRoomId }: P
   const [roomId, setRoomId] = useState(reservation?.room_id ?? defaultRoomId ?? '')
   const [guestName, setGuestName] = useState(reservation?.guest_name ?? '')
   const [checkIn, setCheckIn] = useState(reservation?.check_in ?? '')
+  const [checkInTime, setCheckInTime] = useState(reservation?.check_in_time ?? '午後')
   const [checkOut, setCheckOut] = useState(reservation?.check_out ?? '')
+  const [checkOutTime, setCheckOutTime] = useState(reservation?.check_out_time ?? '午前')
   const [roomFee, setRoomFee] = useState(String(reservation?.room_fee ?? ''))
   const [cleaningFee, setCleaningFee] = useState(String(reservation?.cleaning_fee ?? ''))
   const [cleaningCost, setCleaningCost] = useState(String(reservation?.cleaning_cost ?? ''))
+  const [isExtension, setIsExtension] = useState(reservation?.is_extension ?? false)
   const [memo, setMemo] = useState(reservation?.memo ?? '')
   const [checklist, setChecklist] = useState<ChecklistItem[]>(
     reservation?.checklist && reservation.checklist.length > 0
@@ -66,10 +70,13 @@ export default function ReservationForm({ rooms, reservation, defaultRoomId }: P
       room_id: roomId,
       guest_name: guestName,
       check_in: checkIn,
+      check_in_time: checkInTime,
       check_out: checkOut,
+      check_out_time: checkOutTime,
       room_fee: Number(roomFee) || 0,
       cleaning_fee: Number(cleaningFee) || 0,
       cleaning_cost: Number(cleaningCost) || 0,
+      is_extension: isExtension,
       checklist,
       memo: memo || null,
     }
@@ -100,7 +107,7 @@ export default function ReservationForm({ rooms, reservation, defaultRoomId }: P
           <select className="input" required value={roomId} onChange={e => handleRoomChange(e.target.value)}>
             <option value="">選択してください</option>
             {rooms.map(r => (
-              <option key={r.id} value={r.id}>{r.name}</option>
+              <option key={r.id} value={r.id}>{roomDisplayName(r)}</option>
             ))}
           </select>
         </div>
@@ -110,11 +117,23 @@ export default function ReservationForm({ rooms, reservation, defaultRoomId }: P
         </div>
         <div>
           <label className="label">チェックイン *</label>
-          <input className="input" type="date" required value={checkIn} onChange={e => setCheckIn(e.target.value)} />
+          <div className="flex gap-2">
+            <input className="input flex-1" type="date" required value={checkIn} onChange={e => setCheckIn(e.target.value)} />
+            <select className="input w-24" value={checkInTime} onChange={e => setCheckInTime(e.target.value)}>
+              <option value="午前">午前</option>
+              <option value="午後">午後</option>
+            </select>
+          </div>
         </div>
         <div>
           <label className="label">チェックアウト *</label>
-          <input className="input" type="date" required value={checkOut} onChange={e => setCheckOut(e.target.value)} />
+          <div className="flex gap-2">
+            <input className="input flex-1" type="date" required value={checkOut} onChange={e => setCheckOut(e.target.value)} />
+            <select className="input w-24" value={checkOutTime} onChange={e => setCheckOutTime(e.target.value)}>
+              <option value="午前">午前</option>
+              <option value="午後">午後</option>
+            </select>
+          </div>
         </div>
         <div>
           <label className="label">宿泊料（円）</label>
@@ -127,6 +146,18 @@ export default function ReservationForm({ rooms, reservation, defaultRoomId }: P
         <div>
           <label className="label">清掃費用（円・実費）</label>
           <input className="input" type="number" value={cleaningCost} onChange={e => setCleaningCost(e.target.value)} placeholder="3000" />
+        </div>
+        <div className="col-span-2 flex items-center gap-2">
+          <input
+            type="checkbox"
+            id="is_extension"
+            className="w-4 h-4 rounded text-blue-600"
+            checked={isExtension}
+            onChange={e => setIsExtension(e.target.checked)}
+          />
+          <label htmlFor="is_extension" className="text-sm font-medium text-gray-700 cursor-pointer">
+            この予約は延長です
+          </label>
         </div>
         <div className="col-span-2">
           <label className="label">メモ</label>

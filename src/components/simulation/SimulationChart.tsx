@@ -5,7 +5,7 @@ import {
   Legend, ResponsiveContainer, ReferenceLine, Cell,
 } from 'recharts'
 import type { MonthlySummary, Room } from '@/types'
-import { formatCurrency, formatYearMonth } from '@/lib/utils'
+import { formatCurrency, formatYearMonth, roomDisplayName } from '@/lib/utils'
 
 interface Props {
   summaries: MonthlySummary[]
@@ -151,7 +151,7 @@ export default function SimulationChart({ summaries, rooms }: Props) {
             <tbody>
               {hints.map(({ room, occ, suggestion, suggestionClass }) => (
                 <tr key={room.id} className="hover:bg-gray-50">
-                  <td className="table-td font-medium text-gray-900">{room.name}</td>
+                  <td className="table-td font-medium text-gray-900">{roomDisplayName(room)}</td>
                   <td className="table-td font-semibold text-blue-600">
                     {formatCurrency(room.current_price)}/月
                   </td>

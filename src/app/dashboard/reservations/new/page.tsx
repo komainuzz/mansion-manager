@@ -10,7 +10,7 @@ export default async function NewReservationPage({
 }: {
   searchParams: { room_id?: string }
 }) {
-  const { data } = await supabase.from('rooms').select('*').order('name')
+  const { data } = await supabase.from('rooms').select('*').order('building_name')
   const rooms = (data ?? []) as Room[]
 
   return (

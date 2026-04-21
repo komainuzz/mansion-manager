@@ -3,33 +3,40 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import LogoutButton from './LogoutButton'
+import {
+  LayoutDashboard,
+  Building2,
+  CalendarDays,
+  CalendarRange,
+  TrendingUp,
+  ShieldCheck,
+} from 'lucide-react'
 
 const NAV = [
-  { href: '/dashboard',              label: '概要',           icon: '📊' },
-  { href: '/dashboard/rooms',        label: '部屋管理',       icon: '🏠' },
-  { href: '/dashboard/reservations', label: '予約管理',       icon: '📅' },
-  { href: '/dashboard/calendar',     label: '稼働カレンダー', icon: '🗓️' },
-  { href: '/dashboard/simulation',   label: 'シミュレーション', icon: '📈' },
+  { href: '/dashboard',              label: '概要',             Icon: LayoutDashboard },
+  { href: '/dashboard/rooms',        label: '部屋管理',         Icon: Building2 },
+  { href: '/dashboard/reservations', label: '予約管理',         Icon: CalendarDays },
+  { href: '/dashboard/calendar',     label: '稼働カレンダー',   Icon: CalendarRange },
+  { href: '/dashboard/simulation',   label: 'シミュレーション', Icon: TrendingUp },
 ]
 
 interface Props {
   userEmail?: string
+  isAdmin?: boolean
 }
 
-export default function Sidebar({ userEmail }: Props) {
+export default function Sidebar({ userEmail, isAdmin }: Props) {
   const pathname = usePathname()
 
   return (
     <aside className="w-56 min-h-screen bg-slate-900 text-white flex flex-col">
-      {/* ロゴ */}
       <div className="px-5 py-5 border-b border-slate-700">
         <p className="text-xs text-slate-400 font-medium uppercase tracking-widest">管理システム</p>
-        <h1 className="text-lg font-bold mt-0.5">マンション管理</h1>
+        <h1 className="text-lg font-bold mt-0.5">マンスリー管理</h1>
       </div>
 
-      {/* ナビゲーション */}
       <nav className="flex-1 py-4 space-y-0.5 px-2">
-        {NAV.map(({ href, label, icon }) => {
+        {NAV.map(({ href, label, Icon }) => {
           const active =
             href === '/dashboard'
               ? pathname === '/dashboard'
@@ -44,14 +51,29 @@ export default function Sidebar({ userEmail }: Props) {
                   : 'text-slate-300 hover:bg-slate-800 hover:text-white'
                 }`}
             >
-              <span>{icon}</span>
+              <Icon size={16} />
               {label}
             </Link>
           )
         })}
       </nav>
 
-      {/* ユーザー情報・ログアウト */}
+      {isAdmin && (
+        <div className="px-2 pb-2">
+          <Link
+            href="/dashboard/admin"
+            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
+              ${pathname.startsWith('/dashboard/admin')
+                ? 'bg-blue-600 text-white'
+                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+              }`}
+          >
+            <ShieldCheck size={16} />
+            ユーザー承認
+          </Link>
+        </div>
+      )}
+
       <div className="px-2 py-3 border-t border-slate-700 space-y-1">
         {userEmail && (
           <div className="px-3 py-2">

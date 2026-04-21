@@ -1,10 +1,11 @@
 import { supabase } from '@/lib/supabase'
 import type { Room, Reservation } from '@/types'
-import { formatCurrency, formatDate } from '@/lib/utils'
+import { formatCurrency, formatDate, roomDisplayName } from '@/lib/utils'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { differenceInDays, parseISO } from 'date-fns'
 import DeleteReservationButton from './DeleteReservationButton'
+import ExtendReservationButton from './ExtendReservationButton'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,8 +38,12 @@ export default async function ReservationDetailPage({ params }: { params: { id: 
           <Link href="/dashboard/reservations" className="text-gray-400 hover:text-gray-600 text-sm">← 戻る</Link>
           <h2 className="text-2xl font-bold text-gray-900">{r.guest_name} 様</h2>
           <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${statusClass}`}>{statusLabel}</span>
+          {r.is_extension && (
+            <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700">延長</span>
+          )}
         </div>
         <div className="flex gap-2">
+          <ExtendReservationButton id={r.id} currentCheckOut={r.check_out} currentRoomFee={r.room_fee} />
           <Link href={`/dashboard/reservations/${r.id}/edit`} className="btn-secondary">編集</Link>
           <DeleteReservationButton id={r.id} />
         </div>
@@ -50,10 +55,10 @@ export default async function ReservationDetailPage({ params }: { params: { id: 
             <h3 className="font-semibold text-gray-900 mb-4">予約情報</h3>
             <dl className="grid grid-cols-2 gap-4 text-sm">
               {[
-                ['部屋', r.room?.name],
+                ['部屋', r.room ? roomDisplayName(r.room) : null],
                 ['ゲスト名', r.guest_name],
-                ['チェックイン', formatDate(r.check_in)],
-                ['チェックアウト', formatDate(r.check_out)],
+                ['チェックイン', `${formatDate(r.check_in)}　${r.check_in_time ?? ''}`.trim()],
+                ['チェックアウト', `${formatDate(r.check_out)}　${r.check_out_time ?? ''}`.trim()],
                 ['泊数', `${nights} 泊`],
                 ['最寄駅', r.room?.nearest_station],
                 ['鍵の場所', r.room?.key_location],

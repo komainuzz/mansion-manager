@@ -1,13 +1,14 @@
 import { supabase } from '@/lib/supabase'
-import type { Room, Reservation } from '@/types'
+import type { Room, Reservation, Cleaning } from '@/types'
 import GanttCalendar from '@/components/calendar/GanttCalendar'
 
 export const dynamic = 'force-dynamic'
 
 export default async function CalendarPage() {
-  const [{ data: rooms }, { data: reservations }] = await Promise.all([
-    supabase.from('rooms').select('*').order('name'),
+  const [{ data: rooms }, { data: reservations }, { data: cleanings }] = await Promise.all([
+    supabase.from('rooms').select('*').order('building_name'),
     supabase.from('reservations').select('*').order('check_in'),
+    supabase.from('cleanings').select('*').order('scheduled_date'),
   ])
 
   return (
@@ -19,6 +20,7 @@ export default async function CalendarPage() {
       <GanttCalendar
         rooms={(rooms ?? []) as Room[]}
         reservations={(reservations ?? []) as Reservation[]}
+        cleanings={(cleanings ?? []) as Cleaning[]}
       />
     </div>
   )

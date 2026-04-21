@@ -1,18 +1,21 @@
 import { supabase } from '@/lib/supabase'
 import type { Room, Reservation } from '@/types'
-import { formatCurrency, formatDate } from '@/lib/utils'
+import { formatCurrency, formatDate, roomDisplayName } from '@/lib/utils'
 import Link from 'next/link'
 import { differenceInDays, parseISO } from 'date-fns'
+import { CalendarDays, Upload } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
 
 export default async function ReservationsPage() {
   const [{ data: rooms }, { data: reservations }] = await Promise.all([
-    supabase.from('rooms').select('id, name').order('name'),
+    supabase.from('rooms').select('id, building_name, room_number').order('building_name'),
     supabase.from('reservations').select('*').order('check_in', { ascending: false }),
   ])
 
-  const roomMap = Object.fromEntries((rooms ?? []).map((r: { id: string; name: string }) => [r.id, r.name]))
+  const roomMap = Object.fromEntries(
+    (rooms ?? []).map((r: { id: string; building_name: string; room_number: string | null }) => [r.id, roomDisplayName(r)])
+  )
   const res = (reservations ?? []) as Reservation[]
   const today = new Date().toISOString().slice(0, 10)
 
@@ -29,12 +32,20 @@ export default async function ReservationsPage() {
           <h2 className="text-2xl font-bold text-gray-900">予約管理</h2>
           <p className="text-sm text-gray-500 mt-0.5">{res.length} 件</p>
         </div>
-        <Link href="/dashboard/reservations/new" className="btn-primary">+ 新規登録</Link>
+        <div className="flex gap-2">
+          <Link href="/dashboard/reservations/import" className="btn-secondary flex items-center gap-1.5">
+            <Upload size={14} />
+            CSV一括登録
+          </Link>
+          <Link href="/dashboard/reservations/new" className="btn-primary">+ 新規登録</Link>
+        </div>
       </div>
 
       {res.length === 0 ? (
         <div className="card text-center py-16">
-          <p className="text-4xl mb-3">📅</p>
+          <div className="flex justify-center mb-3">
+            <CalendarDays size={40} className="text-gray-300" />
+          </div>
           <p className="text-gray-500 mb-4">予約が登録されていません</p>
           <Link href="/dashboard/reservations/new" className="btn-primary">最初の予約を登録する</Link>
         </div>
@@ -61,9 +72,14 @@ export default async function ReservationsPage() {
                 return (
                   <tr key={r.id} className="hover:bg-gray-50 transition-colors">
                     <td className="table-td">
-                      <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${st.className}`}>
-                        {st.label}
-                      </span>
+                      <div className="flex gap-1 flex-wrap">
+                        <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${st.className}`}>
+                          {st.label}
+                        </span>
+                        {r.is_extension && (
+                          <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">延長</span>
+                        )}
+                      </div>
                     </td>
                     <td className="table-td font-medium">{roomMap[r.room_id] ?? '—'}</td>
                     <td className="table-td">{r.guest_name}</td>
