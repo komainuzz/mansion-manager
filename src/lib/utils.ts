@@ -30,14 +30,14 @@ export function stayDays(checkIn: string, checkOut: string): number {
 /** 指定月に稼働していた日数（activeRoomIdsで絞り込み） */
 function occupiedDaysInMonth(reservations: Reservation[], yearMonth: string, activeRoomIds?: Set<string>): number {
   const monthStart = startOfMonth(parseISO(yearMonth + '-01'))
-  const monthEnd = endOfMonth(monthStart)
+  const nextMonthStart = addMonths(monthStart, 1)  // 排他的上限（endOfMonth の 23:59:59 問題を回避）
   let total = 0
   for (const r of reservations) {
     if (activeRoomIds && !activeRoomIds.has(r.room_id)) continue
     const ci = parseISO(r.check_in)
     const co = parseISO(r.check_out)
     const overlapStart = max([ci, monthStart])
-    const overlapEnd = min([co, monthEnd])
+    const overlapEnd = min([co, nextMonthStart])
     const days = differenceInDays(overlapEnd, overlapStart)
     if (days > 0) total += days
   }

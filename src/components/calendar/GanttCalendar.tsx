@@ -6,19 +6,19 @@ import { ja } from 'date-fns/locale'
 import type { Room, Reservation, Cleaning } from '@/types'
 import { roomColorHex, roomDisplayName } from '@/lib/utils'
 import Link from 'next/link'
-import { Plus } from 'lucide-react'
+import { Plus, X } from 'lucide-react'
 import CleaningModal from './CleaningModal'
 
 const TOTAL_DAYS = 35
 const DAY_WIDTH = 40
-const ROW_HEIGHT = 56       // 上段：予約バー / 下段：清掃バー
+const ROW_HEIGHT = 56
 const RES_TOP = 4
 const RES_HEIGHT = 28
 const CLEAN_TOP = 38
 const CLEAN_HEIGHT = 14
 
-const CLEANING_COLOR = '#94a3b8'  // slate-400
-const BAR_COLORS = ['#1d6fb5', '#1a8a5c']  // 2色交互（青・緑）
+const CLEANING_COLOR = '#94a3b8'
+const BAR_COLORS = ['#1d6fb5', '#1a8a5c']
 
 interface Props {
   rooms: Room[]
@@ -40,14 +40,21 @@ interface CleanModal {
   cleaning?: Cleaning
 }
 
+interface RoomResList {
+  room: Room
+  list: Reservation[]
+}
+
 export default function GanttCalendar({ rooms, reservations, cleanings }: Props) {
   const [baseDate, setBaseDate] = useState(() => startOfWeek(new Date(), { locale: ja }))
   const [resTooltip, setResTooltip] = useState<ResTooltip | null>(null)
   const [cleanTooltip, setCleanTooltip] = useState<{ cleaning: Cleaning; x: number; y: number } | null>(null)
   const [cleanModal, setCleanModal] = useState<CleanModal | null>(null)
-  const [refreshKey, setRefreshKey] = useState(0)
+  const [addCleanModal, setAddCleanModal] = useState(false)
+  const [roomResList, setRoomResList] = useState<RoomResList | null>(null)
 
   const days = Array.from({ length: TOTAL_DAYS }, (_, i) => addDays(baseDate, i))
+  const todayStr = format(new Date(), 'yyyy-MM-dd')
 
   function prevWeek() { setBaseDate(d => addDays(d, -7)) }
   function nextWeek() { setBaseDate(d => addDays(d, 7)) }
@@ -67,6 +74,11 @@ export default function GanttCalendar({ rooms, reservations, cleanings }: Props)
     return cleanings.filter(c => c.room_id === roomId && c.scheduled_date >= start && c.scheduled_date <= end)
   }
 
+  function getAllReservationsForRoom(roomId: string): Reservation[] {
+    return [...reservations.filter(r => r.room_id === roomId)]
+      .sort((a, b) => b.check_in.localeCompare(a.check_in))
+  }
+
   function getResBarStyle(r: Reservation) {
     const start = days[0]
     const ci = parseISO(r.check_in); const co = parseISO(r.check_out)
@@ -81,7 +93,6 @@ export default function GanttCalendar({ rooms, reservations, cleanings }: Props)
     const start = days[0]
     const dayIdx = differenceInDays(parseISO(c.scheduled_date), start)
     if (dayIdx < 0 || dayIdx >= TOTAL_DAYS) return null
-    // 時間が指定されている場合は時間比率でオフセット・幅を計算
     if (c.start_time && c.end_time) {
       const [sh, sm] = c.start_time.split(':').map(Number)
       const [eh, em] = c.end_time.split(':').map(Number)
@@ -96,9 +107,9 @@ export default function GanttCalendar({ rooms, reservations, cleanings }: Props)
 
   function handleGanttClick(e: React.MouseEvent<HTMLDivElement>, room: Room) {
     const rect = e.currentTarget.getBoundingClientRect()
-    const relX = e.clientX - rect.left
     const relY = e.clientY - rect.top
-    if (relY < CLEAN_TOP) return   // 上段（予約エリア）はスキップ
+    if (relY < CLEAN_TOP) return
+    const relX = e.clientX - rect.left
     const dayIdx = Math.min(TOTAL_DAYS - 1, Math.max(0, Math.floor(relX / DAY_WIDTH)))
     const date = format(addDays(baseDate, dayIdx), 'yyyy-MM-dd')
     setCleanModal({ roomId: room.id, roomName: roomDisplayName(room), date })
@@ -116,6 +127,14 @@ export default function GanttCalendar({ rooms, reservations, cleanings }: Props)
         <span className="text-sm text-gray-500 flex-1">
           {format(days[0], 'yyyy年M月d日', { locale: ja })} 〜 {format(days[TOTAL_DAYS - 1], 'M月d日', { locale: ja })}
         </span>
+        <button
+          type="button"
+          onClick={() => setAddCleanModal(true)}
+          className="btn-secondary py-1.5 px-3 text-xs flex items-center gap-1.5"
+        >
+          <Plus size={13} />
+          清掃予定を追加
+        </button>
         <Link href="/dashboard/reservations/new" className="btn-primary py-1.5 px-3 text-xs flex items-center gap-1.5">
           <Plus size={13} />
           入居登録
@@ -133,6 +152,7 @@ export default function GanttCalendar({ rooms, reservations, cleanings }: Props)
           <span className="w-4 h-2.5 rounded-sm inline-block" style={{ backgroundColor: CLEANING_COLOR }} />
           清掃予定（下段をクリックで登録）
         </div>
+        <span className="text-gray-400">部屋名クリックで予約一覧を表示</span>
       </div>
 
       {rooms.length === 0 ? (
@@ -140,15 +160,6 @@ export default function GanttCalendar({ rooms, reservations, cleanings }: Props)
           <p className="text-gray-500 font-medium">部屋がまだ登録されていません</p>
           <p className="text-sm text-gray-400 mt-1 mb-4">入居登録の前に、まず部屋を登録してください</p>
           <Link href="/dashboard/rooms/new" className="btn-secondary inline-flex">部屋を登録する</Link>
-        </div>
-      ) : reservations.length === 0 && cleanings.length === 0 ? (
-        <div className="card text-center py-12">
-          <p className="text-gray-500 font-medium">入居登録がまだありません</p>
-          <p className="text-sm text-gray-400 mt-1 mb-4">カレンダーに表示するには入居（予約）を登録してください</p>
-          <Link href="/dashboard/reservations/new" className="btn-primary inline-flex items-center gap-1.5">
-            <Plus size={14} />
-            入居登録をする
-          </Link>
         </div>
       ) : (
         <div className="card overflow-x-auto p-0">
@@ -190,9 +201,13 @@ export default function GanttCalendar({ rooms, reservations, cleanings }: Props)
                     <td className="sticky left-0 z-10 bg-white group-hover:bg-gray-50 border-b border-r border-gray-100 px-4 py-2 text-sm font-medium text-gray-800 w-40 min-w-[160px]">
                       <div className="flex items-center gap-2">
                         <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
-                        <Link href={`/dashboard/rooms/${room.id}`} className="hover:text-blue-600 truncate">
+                        <button
+                          type="button"
+                          onClick={() => setRoomResList({ room, list: getAllReservationsForRoom(room.id) })}
+                          className="hover:text-blue-600 truncate text-left text-sm font-medium"
+                        >
                           {roomDisplayName(room)}
-                        </Link>
+                        </button>
                       </div>
                     </td>
                     <td
@@ -205,7 +220,6 @@ export default function GanttCalendar({ rooms, reservations, cleanings }: Props)
                         style={{ height: ROW_HEIGHT, width: DAY_WIDTH * TOTAL_DAYS }}
                         onClick={e => handleGanttClick(e, room)}
                       >
-                        {/* 縦グリッド線 + 今日・土日ハイライト */}
                         {days.map((day, i) => {
                           const dow = day.getDay()
                           const todayFlag = isToday(day)
@@ -224,11 +238,9 @@ export default function GanttCalendar({ rooms, reservations, cleanings }: Props)
                           )
                         })}
 
-                        {/* 清掃エリアのヒント線 */}
                         <div className="absolute left-0 right-0 border-t border-dashed border-gray-200 pointer-events-none"
                           style={{ top: CLEAN_TOP }} />
 
-                        {/* 予約バー */}
                         {roomReservations.map(r => {
                           const style = getResBarStyle(r)
                           if (!style) return null
@@ -253,7 +265,6 @@ export default function GanttCalendar({ rooms, reservations, cleanings }: Props)
                           )
                         })}
 
-                        {/* 清掃バー */}
                         {roomCleanings.map(c => {
                           const style = getCleanBarStyle(c)
                           if (!style) return null
@@ -359,7 +370,7 @@ export default function GanttCalendar({ rooms, reservations, cleanings }: Props)
         </div>
       )}
 
-      {/* 清掃モーダル */}
+      {/* 清掃モーダル（行クリック） */}
       {cleanModal && (
         <CleaningModal
           roomId={cleanModal.roomId}
@@ -367,8 +378,100 @@ export default function GanttCalendar({ rooms, reservations, cleanings }: Props)
           date={cleanModal.date}
           cleaning={cleanModal.cleaning}
           onClose={() => setCleanModal(null)}
-          onSaved={() => { setCleanModal(null); setRefreshKey(k => k + 1); window.location.reload() }}
+          onSaved={() => { setCleanModal(null); window.location.reload() }}
         />
+      )}
+
+      {/* 清掃モーダル（追加ボタン） */}
+      {addCleanModal && (
+        <CleaningModal
+          rooms={rooms}
+          roomId=""
+          roomName=""
+          date={format(new Date(), 'yyyy-MM-dd')}
+          onClose={() => setAddCleanModal(false)}
+          onSaved={() => { setAddCleanModal(false); window.location.reload() }}
+        />
+      )}
+
+      {/* 部屋別予約一覧モーダル */}
+      {roomResList && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setRoomResList(null)} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-2xl mx-4 max-h-[80vh] flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
+              <div>
+                <h3 className="font-semibold text-gray-900">{roomDisplayName(roomResList.room)}</h3>
+                <p className="text-sm text-gray-500 mt-0.5">予約一覧（全{roomResList.list.length}件）</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Link
+                  href={`/dashboard/rooms/${roomResList.room.id}`}
+                  className="btn-secondary py-1.5 px-3 text-xs"
+                  onClick={() => setRoomResList(null)}
+                >
+                  部屋詳細
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => setRoomResList(null)}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            <div className="overflow-y-auto flex-1">
+              {roomResList.list.length === 0 ? (
+                <p className="text-center py-12 text-gray-400">予約はありません</p>
+              ) : (
+                <table className="w-full">
+                  <thead>
+                    <tr className="sticky top-0 bg-white">
+                      <th className="table-th">チェックイン</th>
+                      <th className="table-th">チェックアウト</th>
+                      <th className="table-th">氏名</th>
+                      <th className="table-th text-right">宿泊料</th>
+                      <th className="table-th"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {roomResList.list.map(r => {
+                      const isPast = r.check_out <= todayStr
+                      const isActive = r.check_in <= todayStr && r.check_out > todayStr
+                      return (
+                        <tr key={r.id} className={`hover:bg-gray-50 ${isPast ? 'opacity-60' : ''}`}>
+                          <td className="table-td text-sm">{r.check_in}<span className="text-gray-400 ml-1">{r.check_in_time}</span></td>
+                          <td className="table-td text-sm">{r.check_out}<span className="text-gray-400 ml-1">{r.check_out_time}</span></td>
+                          <td className="table-td font-medium">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span>{r.guest_name}</span>
+                              {r.is_extension && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">延長</span>}
+                              {isActive && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">入居中</span>}
+                            </div>
+                          </td>
+                          <td className="table-td text-right font-medium text-emerald-700">
+                            ¥{r.room_fee.toLocaleString()}
+                          </td>
+                          <td className="table-td">
+                            <Link
+                              href={`/dashboard/reservations/${r.id}`}
+                              className="text-xs text-blue-600 hover:text-blue-800"
+                              onClick={() => setRoomResList(null)}
+                            >
+                              詳細
+                            </Link>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

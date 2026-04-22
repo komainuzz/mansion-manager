@@ -5,7 +5,7 @@ import {
   formatCurrency, roomDisplayName,
 } from '@/lib/utils'
 import {
-  getDaysInMonth, startOfMonth, endOfMonth, differenceInDays,
+  getDaysInMonth, startOfMonth, differenceInDays, addMonths,
   max as maxDate, min as minDate, parseISO,
 } from 'date-fns'
 import RoomAccordion from '@/components/simulation/RoomAccordion'
@@ -39,11 +39,11 @@ export default async function SimulationPage() {
     for (const month of past6Months) {
       if (!isRoomActiveInMonth(room, month)) continue
       const monthStart = startOfMonth(parseISO(month + '-01'))
-      const monthEnd = endOfMonth(monthStart)
+      const nextMonthStart = addMonths(monthStart, 1)
       totalAvailable += getDaysInMonth(monthStart)
       for (const r of roomRes) {
         const overlapStart = maxDate([parseISO(r.check_in), monthStart])
-        const overlapEnd = minDate([parseISO(r.check_out), monthEnd])
+        const overlapEnd = minDate([parseISO(r.check_out), nextMonthStart])
         const days = differenceInDays(overlapEnd, overlapStart)
         if (days > 0) totalOccupied += days
       }

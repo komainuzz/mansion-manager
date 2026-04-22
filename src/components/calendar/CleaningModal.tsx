@@ -3,18 +3,21 @@
 import { useState } from 'react'
 import { createBrowserClient } from '@supabase/ssr'
 import { Trash2 } from 'lucide-react'
-import type { Cleaning } from '@/types'
+import type { Cleaning, Room } from '@/types'
+import { roomDisplayName } from '@/lib/utils'
 
 interface Props {
+  rooms?: Room[]       // 渡された場合は部屋セレクターを表示
   roomId: string
   roomName: string
-  date: string            // YYYY-MM-DD
-  cleaning?: Cleaning     // 編集時は既存データ
+  date: string
+  cleaning?: Cleaning
   onClose: () => void
   onSaved: () => void
 }
 
-export default function CleaningModal({ roomId, roomName, date, cleaning, onClose, onSaved }: Props) {
+export default function CleaningModal({ rooms, roomId, roomName, date, cleaning, onClose, onSaved }: Props) {
+  const [selectedRoomId, setSelectedRoomId] = useState(roomId || rooms?.[0]?.id || '')
   const [scheduledDate, setScheduledDate] = useState(cleaning?.scheduled_date ?? date)
   const [startTime, setStartTime] = useState(cleaning?.start_time ?? '')
   const [endTime, setEndTime] = useState(cleaning?.end_time ?? '')
@@ -28,13 +31,18 @@ export default function CleaningModal({ roomId, roomName, date, cleaning, onClos
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
 
+  const effectiveRoomName = rooms
+    ? (rooms.find(r => r.id === selectedRoomId) ? roomDisplayName(rooms.find(r => r.id === selectedRoomId)!) : '—')
+    : roomName
+
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
+    if (!selectedRoomId) { setError('部屋を選択してください'); return }
     setSaving(true)
     setError(null)
 
     const payload = {
-      room_id: roomId,
+      room_id: selectedRoomId,
       scheduled_date: scheduledDate,
       start_time: startTime || null,
       end_time: endTime || null,
@@ -63,10 +71,11 @@ export default function CleaningModal({ roomId, roomName, date, cleaning, onClos
         <div className="flex items-center justify-between mb-4">
           <div>
             <p className="font-semibold text-gray-900">{cleaning ? '清掃予定を編集' : '清掃予定を登録'}</p>
-            <p className="text-sm text-gray-500">{roomName}</p>
+            {!rooms && <p className="text-sm text-gray-500">{roomName}</p>}
           </div>
           {cleaning && (
             <button
+              type="button"
               onClick={handleDelete}
               disabled={deleting}
               className="text-gray-400 hover:text-red-500 transition-colors"
@@ -77,6 +86,24 @@ export default function CleaningModal({ roomId, roomName, date, cleaning, onClos
         </div>
 
         <form onSubmit={handleSave} className="space-y-3">
+          {/* 部屋選択（roomsが渡された場合のみ表示） */}
+          {rooms && rooms.length > 0 && (
+            <div>
+              <label className="label">部屋 *</label>
+              <select
+                className="input"
+                value={selectedRoomId}
+                onChange={e => setSelectedRoomId(e.target.value)}
+                required
+              >
+                <option value="">選択してください</option>
+                {rooms.map(r => (
+                  <option key={r.id} value={r.id}>{roomDisplayName(r)}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div>
             <label className="label">清掃日 *</label>
             <input

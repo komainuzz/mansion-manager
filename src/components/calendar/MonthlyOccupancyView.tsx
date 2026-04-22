@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { parseISO, getDaysInMonth, startOfMonth, endOfMonth, differenceInDays, max, min } from 'date-fns'
+import { parseISO, getDaysInMonth, startOfMonth, addMonths, differenceInDays, max, min } from 'date-fns'
 import type { Room, Reservation } from '@/types'
 import { roomDisplayName, isRoomActiveInMonth } from '@/lib/utils'
 import Link from 'next/link'
@@ -21,7 +21,7 @@ function getMonthsInYear(year: number): string[] {
 function calcOccupancy(room: Room, reservations: Reservation[], yearMonth: string): number | null {
   if (!isRoomActiveInMonth(room, yearMonth)) return null
   const monthStart = startOfMonth(parseISO(yearMonth + '-01'))
-  const monthEnd = endOfMonth(monthStart)
+  const nextMonthStart = addMonths(monthStart, 1)
   const daysInMonth = getDaysInMonth(monthStart)
   let occupied = 0
   for (const r of reservations) {
@@ -29,7 +29,7 @@ function calcOccupancy(room: Room, reservations: Reservation[], yearMonth: strin
     const ci = parseISO(r.check_in)
     const co = parseISO(r.check_out)
     const overlapStart = max([ci, monthStart])
-    const overlapEnd = min([co, monthEnd])
+    const overlapEnd = min([co, nextMonthStart])
     const days = differenceInDays(overlapEnd, overlapStart)
     if (days > 0) occupied += days
   }
