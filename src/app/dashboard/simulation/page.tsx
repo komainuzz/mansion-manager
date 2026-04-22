@@ -7,7 +7,7 @@ import {
   getDaysInMonth, startOfMonth, endOfMonth, differenceInDays,
   max as maxDate, min as minDate, parseISO,
 } from 'date-fns'
-import RoomTabs from '@/components/simulation/RoomTabs'
+import RoomAccordion from '@/components/simulation/RoomAccordion'
 import type { RecoveryStats } from '@/components/simulation/RoomSimulationPanel'
 
 export const dynamic = 'force-dynamic'
@@ -118,7 +118,7 @@ export default async function SimulationPage() {
         </p>
       </div>
 
-      <RoomTabs
+      <RoomAccordion
         rooms={roomList}
         occupancyByRoom={occupancyByRoom}
         recoveryByRoom={recoveryByRoom}
