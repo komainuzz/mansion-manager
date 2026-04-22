@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   Legend, ResponsiveContainer, ReferenceLine, Cell,
@@ -10,6 +11,14 @@ import { formatCurrency, formatYearMonth } from '@/lib/utils'
 interface Props {
   summaries: MonthlySummary[]
 }
+
+const PERIOD_OPTIONS = [
+  { label: '3ヶ月',  months: 3 },
+  { label: '6ヶ月',  months: 6 },
+  { label: '12ヶ月', months: 12 },
+  { label: '24ヶ月', months: 24 },
+  { label: '全期間', months: 0 },
+]
 
 function formatYM(ym: string) {
   const [y, m] = ym.split('-')
@@ -33,7 +42,11 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 }
 
 export default function SimulationChart({ summaries }: Props) {
-  const chartData = summaries.map(s => ({
+  const [periodMonths, setPeriodMonths] = useState(12)
+
+  const displayed = periodMonths === 0 ? summaries : summaries.slice(-periodMonths)
+
+  const chartData = displayed.map(s => ({
     name: formatYM(s.yearMonth),
     収入: s.revenue,
     費用: s.costs,
@@ -43,15 +56,34 @@ export default function SimulationChart({ summaries }: Props) {
     occupancyRate: s.occupancyRate,
   }))
 
-  // 累計損益
+  // 累計損益（表示期間内で累積）
   let cumulative = 0
-  const cumulativeData = summaries.map(s => {
+  const cumulativeData = displayed.map(s => {
     cumulative += s.profit
     return { name: formatYM(s.yearMonth), 累計損益: cumulative, isForecast: s.isForecast }
   })
 
   return (
     <div className="space-y-8">
+      {/* 期間フィルター */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-sm font-medium text-gray-600">表示期間：</span>
+        {PERIOD_OPTIONS.map(opt => (
+          <button
+            key={opt.months}
+            type="button"
+            onClick={() => setPeriodMonths(opt.months)}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              periodMonths === opt.months
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+
       {/* 月次損益グラフ */}
       <div className="card">
         <h3 className="font-semibold text-gray-900 mb-1">月次損益（実績 + 予測）</h3>
@@ -83,7 +115,7 @@ export default function SimulationChart({ summaries }: Props) {
       {/* 累計損益グラフ */}
       <div className="card">
         <h3 className="font-semibold text-gray-900 mb-1">累計損益推移</h3>
-        <p className="text-xs text-gray-500 mb-4">薄い色 = 予測</p>
+        <p className="text-xs text-gray-500 mb-4">薄い色 = 予測　表示期間内での累積</p>
         <ResponsiveContainer width="100%" height={220}>
           <ComposedChart data={cumulativeData} margin={{ top: 10, right: 20, left: 10, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -105,8 +137,11 @@ export default function SimulationChart({ summaries }: Props) {
 
       {/* 月次サマリーテーブル */}
       <div className="card overflow-hidden p-0">
-        <div className="px-5 py-4 border-b border-gray-100">
-          <h3 className="font-semibold text-gray-900">月次サマリー一覧</h3>
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+          <div>
+            <h3 className="font-semibold text-gray-900">月次サマリー一覧</h3>
+            <p className="text-xs text-gray-500 mt-0.5">{displayed.length}ヶ月分を表示中</p>
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -121,7 +156,7 @@ export default function SimulationChart({ summaries }: Props) {
               </tr>
             </thead>
             <tbody>
-              {summaries.map(s => (
+              {displayed.map(s => (
                 <tr key={s.yearMonth} className={`hover:bg-gray-50 ${s.isForecast ? 'opacity-70' : ''}`}>
                   <td className="table-td font-medium">{formatYearMonth(s.yearMonth)}</td>
                   <td className="table-td text-right text-emerald-600 font-medium">{formatCurrency(s.revenue)}</td>

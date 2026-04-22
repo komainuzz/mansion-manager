@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import type { Room, Reservation, Cleaning } from '@/types'
-import GanttCalendar from '@/components/calendar/GanttCalendar'
+import CalendarShell from '@/components/calendar/CalendarShell'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,9 +15,9 @@ export default async function CalendarPage() {
     <div className="p-6 space-y-5">
       <div>
         <h2 className="text-2xl font-bold text-gray-900">稼働カレンダー</h2>
-        <p className="text-sm text-gray-500 mt-0.5">35日間のガントチャート表示</p>
+        <p className="text-sm text-gray-500 mt-0.5">ガントチャート・月別稼働率の切り替え表示</p>
       </div>
-      <GanttCalendar
+      <CalendarShell
         rooms={(rooms ?? []) as Room[]}
         reservations={(reservations ?? []) as Reservation[]}
         cleanings={(cleanings ?? []) as Cleaning[]}

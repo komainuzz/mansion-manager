@@ -20,7 +20,7 @@ export default async function ForecastPage() {
   const utilityList = (utilityCosts ?? []) as UtilityCost[]
 
   const ym = currentYearMonth()
-  const pastMonths = getRecentMonths(6, ym)
+  const pastMonths = getRecentMonths(24, ym)
   const futureMonths = getFutureMonths(6, ym)
   const allMonths = [...pastMonths, ...futureMonths]
   const forecastFrom = format(addMonths(new Date(), 1), 'yyyy-MM')
