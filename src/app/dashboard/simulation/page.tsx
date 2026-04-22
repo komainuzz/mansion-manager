@@ -5,13 +5,90 @@ import {
   formatCurrency, roomDisplayName,
 } from '@/lib/utils'
 import {
-  getDaysInMonth, startOfMonth, differenceInDays, addMonths,
-  max as maxDate, min as minDate, parseISO,
+  getDaysInMonth, startOfMonth, differenceInDays, addMonths, addDays,
+  max as maxDate, min as minDate, parseISO, format,
 } from 'date-fns'
+import { ja } from 'date-fns/locale'
 import RoomAccordion from '@/components/simulation/RoomAccordion'
-import type { RecoveryStats } from '@/components/simulation/RoomSimulationPanel'
+import type { RecoveryStats, RecoveryScenario } from '@/components/simulation/RoomSimulationPanel'
 
 export const dynamic = 'force-dynamic'
+
+// ────────────────────────────────────────────────
+// 日割り収益計算ヘルパー
+// cutoffExclusive = 計上対象期間の翌日 0:00（例: 5/1 → 4/30まで計上）
+// ────────────────────────────────────────────────
+function revenueUpTo(
+  reservations: Reservation[],
+  cutoffExclusive: Date,
+): { roomFeeRevenue: number; cleaningFeeIncome: number; cleaningCost: number } {
+  let roomFeeRevenue = 0
+  let cleaningFeeIncome = 0
+  let cleaningCost = 0
+
+  for (const r of reservations) {
+    const ci = parseISO(r.check_in)
+    const co = parseISO(r.check_out)
+    const stayDays = differenceInDays(co, ci)
+    if (stayDays <= 0) continue
+
+    // 宿泊料：ci〜min(co, cutoffExclusive) の日数を日割り
+    const effectiveCo = co < cutoffExclusive ? co : cutoffExclusive
+    const coveredDays = differenceInDays(effectiveCo, ci)
+    if (coveredDays > 0) {
+      const dailyRate = (r.room_fee || 0) / stayDays
+      roomFeeRevenue += Math.round(dailyRate * Math.min(coveredDays, stayDays))
+    }
+
+    // 清掃料・清掃費：チェックイン日が cutoffExclusive より前なら計上
+    if (ci < cutoffExclusive) {
+      cleaningFeeIncome += r.cleaning_fee || 0
+      cleaningCost += r.cleaning_cost || 0
+    }
+  }
+
+  return { roomFeeRevenue, cleaningFeeIncome, cleaningCost }
+}
+
+function fixedCostUpTo(room: Room, cutoffInclusive: Date): number {
+  if (!room.contract_start) return 0
+  const start = parseISO(room.contract_start)
+  const months = Math.max(0,
+    (cutoffInclusive.getFullYear() - start.getFullYear()) * 12 +
+    (cutoffInclusive.getMonth() - start.getMonth()) + 1
+  )
+  return sumCosts(room.monthly_costs) * months
+}
+
+function computeScenario(
+  room: Room,
+  roomRes: Reservation[],
+  utilityList: UtilityCost[],
+  cutoffInclusive: Date,
+  initialCost: number,
+  label: string,
+): RecoveryScenario {
+  const cutoffExclusive = addDays(cutoffInclusive, 1)
+  const cutoffYM = format(cutoffInclusive, 'yyyy-MM')
+
+  const { roomFeeRevenue, cleaningFeeIncome, cleaningCost } = revenueUpTo(roomRes, cutoffExclusive)
+  const fixedCost = fixedCostUpTo(room, cutoffInclusive)
+  const utilityCost = utilityList
+    .filter(u => u.room_id === room.id && u.year_month <= cutoffYM)
+    .reduce((s, u) => s + (u.electricity || 0) + (u.water || 0), 0)
+
+  const accumulatedRevenue = roomFeeRevenue + cleaningFeeIncome
+  const accumulatedProfit = accumulatedRevenue - fixedCost - utilityCost - cleaningCost
+  const remainingRecovery = Math.max(0, initialCost - accumulatedProfit)
+  const recoveryPct = initialCost > 0
+    ? Math.min(999, Math.round((accumulatedProfit / initialCost) * 100))
+    : 0
+  const cutoffDisplay = format(cutoffInclusive, 'yyyy/M/d', { locale: ja })
+
+  return { label, cutoffDisplay, accumulatedRevenue, accumulatedProfit, remainingRecovery, recoveryPct }
+}
+
+// ────────────────────────────────────────────────
 
 export default async function SimulationPage() {
   const [{ data: rooms }, { data: reservations }, { data: utilityCosts }] = await Promise.all([
@@ -24,10 +101,21 @@ export default async function SimulationPage() {
   const resList = (reservations ?? []) as Reservation[]
   const utilityList = (utilityCosts ?? []) as UtilityCost[]
 
-  const todayStr = new Date().toISOString().slice(0, 10)
+  const now = new Date()
+  const todayStr = now.toISOString().slice(0, 10)
   const todayYM = currentYearMonth()
 
-  // 過去6ヶ月の実績稼働率（部屋別）
+  // ── 共通カットオフ日の計算 ──
+  // 今月末（日割りの基準）
+  const monthEndDate = new Date(now.getFullYear(), now.getMonth() + 1, 0) // 当月最終日
+
+  // 今年度末・来年度末（9月を年度末とする）
+  const currentMonthIdx = now.getMonth() // 0-indexed (8=September)
+  const fyEndYear = currentMonthIdx <= 8 ? now.getFullYear() : now.getFullYear() + 1
+  const fyEndDate = new Date(fyEndYear, 8, 30)      // 9月30日
+  const nextFyEndDate = new Date(fyEndYear + 1, 8, 30)
+
+  // ── 過去6ヶ月の実績稼働率（部屋別）──
   const occupancyByRoom: Record<string, number> = {}
   const past6Months = getRecentMonths(6, todayYM)
 
@@ -51,47 +139,72 @@ export default async function SimulationPage() {
     occupancyByRoom[room.id] = totalAvailable > 0 ? totalOccupied / totalAvailable : 0
   }
 
-  // 部屋別の投資回収状況を計算
+  // ── 部屋別の投資回収状況（4シナリオ） ──
   const recoveryByRoom: Record<string, RecoveryStats> = {}
 
   for (const room of roomList) {
     const initialCost = sumCosts(room.initial_costs)
-    const monthlyFixed = sumCosts(room.monthly_costs)
     const roomRes = resList.filter(r => r.room_id === room.id)
-    const pastRes = roomRes.filter(r => r.check_in < todayStr)
+
+    // 最終退去日（この部屋の全予約で最も遅いcheck_out）
+    const lastCoStr = roomRes.length > 0
+      ? roomRes.reduce((mx, r) => r.check_out > mx ? r.check_out : mx, roomRes[0].check_out)
+      : todayStr
+    const lastCheckoutDate = parseISO(lastCoStr)
+    const finalCheckoutDate = lastCheckoutDate > monthEndDate ? lastCheckoutDate : monthEndDate
+
+    // 4シナリオ
+    const scenarios: RecoveryScenario[] = [
+      computeScenario(room, roomRes, utilityList, monthEndDate,      initialCost, '今月末まで（日割り）'),
+      computeScenario(room, roomRes, utilityList, finalCheckoutDate, initialCost, '最終退去日まで'),
+      computeScenario(room, roomRes, utilityList, fyEndDate,         initialCost, `今年度末（${fyEndYear}/9月）`),
+      computeScenario(room, roomRes, utilityList, nextFyEndDate,     initialCost, `来年度末（${fyEndYear + 1}/9月）`),
+    ]
+
+    // 今月末ベースの内訳（詳細表示用）
+    const monthEndExclusive = addDays(monthEndDate, 1)
+    const { roomFeeRevenue, cleaningFeeIncome, cleaningCost: accumulatedCleaningCost } =
+      revenueUpTo(roomRes, monthEndExclusive)
+    const accumulatedFixedCost = fixedCostUpTo(room, monthEndDate)
+    const accumulatedUtilityCost = utilityList
+      .filter(u => u.room_id === room.id && u.year_month <= todayYM)
+      .reduce((s, u) => s + (u.electricity || 0) + (u.water || 0), 0)
+    const accumulatedProfit = (roomFeeRevenue + cleaningFeeIncome) - accumulatedFixedCost - accumulatedUtilityCost - accumulatedCleaningCost
+    const remainingRecovery = Math.max(0, initialCost - accumulatedProfit)
 
     // 運用開始からの月数
     let operationMonths = 0
     if (room.contract_start) {
       const start = parseISO(room.contract_start)
-      const now = new Date()
       operationMonths = Math.max(0,
         (now.getFullYear() - start.getFullYear()) * 12 +
         (now.getMonth() - start.getMonth()) + 1
       )
     }
 
-    // 収入内訳
-    const roomFeeRevenue = pastRes.reduce((s, r) => s + (r.room_fee || 0), 0)
-    const cleaningFeeIncome = pastRes.reduce((s, r) => s + (r.cleaning_fee || 0), 0)
-    const accumulatedCleaningCost = pastRes.reduce((s, r) => s + (r.cleaning_cost || 0), 0)
+    // 全予約にステータスと日割り取得済み額を付与
+    const allReservations = roomRes.map(r => {
+      const ci = parseISO(r.check_in)
+      const co = parseISO(r.check_out)
+      const status: 'past' | 'active' | 'future' =
+        r.check_out <= todayStr ? 'past'
+        : r.check_in <= todayStr ? 'active'
+        : 'future'
 
-    // 支出内訳
-    const accumulatedFixedCost = monthlyFixed * operationMonths
-    const accumulatedUtilityCost = utilityList
-      .filter(u => u.room_id === room.id && u.year_month <= todayYM)
-      .reduce((s, u) => s + (u.electricity || 0) + (u.water || 0), 0)
+      let earnedRoomFee = r.room_fee || 0
+      if (status === 'active') {
+        const stayDays = differenceInDays(co, ci)
+        if (stayDays > 0) {
+          const todayPlusOne = addDays(now, 1)
+          const effectiveCo = co < todayPlusOne ? co : todayPlusOne
+          const coveredDays = differenceInDays(effectiveCo, ci)
+          earnedRoomFee = Math.round(((r.room_fee || 0) / stayDays) * Math.min(coveredDays, stayDays))
+        }
+      } else if (status === 'future') {
+        earnedRoomFee = 0
+      }
 
-    const accumulatedRevenue = roomFeeRevenue + cleaningFeeIncome
-    const accumulatedProfit = accumulatedRevenue - accumulatedFixedCost - accumulatedUtilityCost - accumulatedCleaningCost
-    const remainingRecovery = Math.max(0, initialCost - accumulatedProfit)
-
-    recoveryByRoom[room.id] = {
-      initialCost,
-      roomFeeRevenue,
-      cleaningFeeIncome,
-      reservationCount: pastRes.length,
-      pastReservations: pastRes.map(r => ({
+      return {
         id: r.id,
         guestName: r.guest_name,
         checkIn: r.check_in,
@@ -99,14 +212,25 @@ export default async function SimulationPage() {
         roomFee: r.room_fee || 0,
         cleaningFee: r.cleaning_fee || 0,
         cleaningCost: r.cleaning_cost || 0,
-      })),
+        status,
+        earnedRoomFee,
+      }
+    }).sort((a, b) => b.checkIn.localeCompare(a.checkIn))
+
+    recoveryByRoom[room.id] = {
+      initialCost,
+      roomFeeRevenue,
+      cleaningFeeIncome,
+      reservationCount: roomRes.length,
+      pastReservations: allReservations,
       accumulatedFixedCost,
       accumulatedUtilityCost,
       accumulatedCleaningCost,
       accumulatedProfit,
       remainingRecovery,
       operationMonths,
-      hasOperationData: pastRes.length > 0,
+      hasOperationData: roomRes.length > 0,
+      scenarios,
     }
   }
 

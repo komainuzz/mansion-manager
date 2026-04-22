@@ -25,6 +25,7 @@ const emptyRecovery: RecoveryStats = {
   remainingRecovery: 0,
   operationMonths: 0,
   hasOperationData: false,
+  scenarios: [],
 }
 
 export default function RoomAccordion({ rooms, occupancyByRoom, recoveryByRoom }: Props) {

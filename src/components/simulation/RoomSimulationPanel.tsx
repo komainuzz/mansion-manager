@@ -9,32 +9,43 @@ export interface RecoveryReservation {
   guestName: string
   checkIn: string
   checkOut: string
-  roomFee: number
+  roomFee: number        // 確定総額
   cleaningFee: number
   cleaningCost: number
+  status: 'past' | 'active' | 'future'
+  earnedRoomFee: number  // 今月末までの日割り分
+}
+
+export interface RecoveryScenario {
+  label: string
+  cutoffDisplay: string
+  accumulatedRevenue: number
+  accumulatedProfit: number
+  remainingRecovery: number
+  recoveryPct: number    // 0〜100+ (initialCost=0なら0)
 }
 
 export interface RecoveryStats {
   initialCost: number
-  // 収入内訳
+  // 今月末日割りベースの内訳（詳細カード用）
   roomFeeRevenue: number
   cleaningFeeIncome: number
   reservationCount: number
-  pastReservations: RecoveryReservation[]
-  // 支出内訳
+  pastReservations: RecoveryReservation[]  // 全予約（past/active/future）
   accumulatedFixedCost: number
   accumulatedUtilityCost: number
   accumulatedCleaningCost: number
-  // 計算値
   accumulatedProfit: number
   remainingRecovery: number
   operationMonths: number
   hasOperationData: boolean
+  // 4シナリオ比較
+  scenarios: RecoveryScenario[]
 }
 
 interface Props {
   room: Room
-  actualOccupancy: number   // 0–1 過去実績
+  actualOccupancy: number
   recovery: RecoveryStats
 }
 
@@ -59,6 +70,12 @@ function monthsLabel(m: number | null) {
   )
 }
 
+const STATUS_BADGE: Record<RecoveryReservation['status'], { label: string; cls: string }> = {
+  past:   { label: '完了', cls: 'bg-gray-100 text-gray-500' },
+  active: { label: '入居中', cls: 'bg-emerald-100 text-emerald-700' },
+  future: { label: '予定', cls: 'bg-blue-100 text-blue-700' },
+}
+
 export default function RoomSimulationPanel({ room, actualOccupancy, recovery }: Props) {
   const [occupancy, setOccupancy] = useState(actualOccupancy > 0 ? nearestOpt(actualOccupancy) : 0.7)
   const [customPrice, setCustomPrice] = useState(room.current_price)
@@ -81,7 +98,6 @@ export default function RoomSimulationPanel({ room, actualOccupancy, recovery }:
     return { revenue, profit, months: Math.ceil(recovery.remainingRecovery / profit) }
   }
 
-  // 目標月数から逆算した必要月額
   function requiredPrice(targetMonths: number): number {
     if (recovery.remainingRecovery <= 0) return 0
     const neededProfit = recovery.remainingRecovery / targetMonths
@@ -152,68 +168,134 @@ export default function RoomSimulationPanel({ room, actualOccupancy, recovery }:
             )}
           </div>
 
-          {/* サマリー3列 */}
-          <div className="grid grid-cols-3 gap-3 mb-4">
-            <div>
-              <p className="text-xs text-gray-500 mb-0.5">初期投資</p>
-              <p className="text-sm font-semibold text-red-600">{formatCurrency(recovery.initialCost)}</p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-500 mb-0.5">累積利益</p>
-              <p className={`text-sm font-semibold ${recovery.accumulatedProfit >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                {formatCurrency(recovery.accumulatedProfit)}
+          {/* ── 4シナリオ比較テーブル ── */}
+          {recovery.scenarios.length > 0 && (
+            <div className="overflow-x-auto mb-4">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-xs text-gray-400 border-b border-gray-100">
+                    <th className="text-left pb-2 pr-4">シナリオ</th>
+                    <th className="text-right pb-2 px-2">累積利益</th>
+                    <th className="pb-2 px-2 min-w-[140px]">回収率</th>
+                    <th className="text-right pb-2 pl-2">残回収額</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recovery.scenarios.map((s, i) => {
+                    const recovered = s.remainingRecovery <= 0
+                    const pct = Math.min(100, Math.max(0, s.recoveryPct))
+                    const isBase = i === 0
+                    return (
+                      <tr key={s.label} className={`border-b border-gray-50 ${isBase ? 'bg-slate-50' : ''}`}>
+                        <td className="py-2 pr-4">
+                          <div className={`font-medium text-xs ${isBase ? 'text-slate-700' : 'text-gray-600'}`}>
+                            {s.label}
+                          </div>
+                          <div className="text-[11px] text-gray-400">〜{s.cutoffDisplay}</div>
+                        </td>
+                        <td className={`py-2 px-2 text-right text-xs font-medium ${s.accumulatedProfit >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                          {formatCurrency(s.accumulatedProfit)}
+                        </td>
+                        <td className="py-2 px-2">
+                          <div className="flex items-center gap-1.5">
+                            <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden min-w-[60px]">
+                              <div
+                                className={`h-full rounded-full ${recovered ? 'bg-emerald-500' : 'bg-blue-500'}`}
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                            <span className={`text-xs font-semibold w-9 text-right shrink-0 ${
+                              recovered ? 'text-emerald-600'
+                              : s.recoveryPct >= 80 ? 'text-blue-600'
+                              : s.recoveryPct >= 50 ? 'text-amber-600'
+                              : 'text-red-500'
+                            }`}>
+                              {s.recoveryPct}%
+                            </span>
+                          </div>
+                        </td>
+                        <td className={`py-2 pl-2 text-right text-xs font-semibold ${recovered ? 'text-emerald-600' : 'text-amber-700'}`}>
+                          {recovered ? '回収済み ✓' : formatCurrency(s.remainingRecovery)}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+              <p className="text-[11px] text-gray-400 mt-1.5">
+                ※今月末まで = 現在進行中の予約を日割り按分した確定収益ベース
               </p>
             </div>
-            <div>
-              <p className="text-xs text-gray-500 mb-0.5">残回収額</p>
-              <p className={`text-sm font-semibold ${isRecovered ? 'text-emerald-600' : 'text-amber-600'}`}>
-                {isRecovered ? '回収済み ✓' : formatCurrency(recovery.remainingRecovery)}
-              </p>
-            </div>
-          </div>
+          )}
 
-          {/* 進捗バー */}
-          <div className="h-3 bg-gray-100 rounded-full overflow-hidden mb-1">
+          {/* 今月末ベースの進捗バー */}
+          <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden mb-1">
             <div
               className={`h-full rounded-full transition-all ${isRecovered ? 'bg-emerald-500' : 'bg-blue-500'}`}
               style={{ width: `${Math.max(1, recoveryPct)}%` }}
             />
           </div>
-          <p className="text-xs text-gray-400 text-right mb-4">{recoveryPct}% 回収済み</p>
+          <p className="text-xs text-gray-400 text-right mb-4">{recoveryPct}% 回収済み（今月末時点）</p>
 
-          {/* 累積利益の計算内訳 */}
+          {/* 累積利益の計算内訳（今月末日割りベース） */}
           <div className="border-t border-gray-100 pt-3">
-            <p className="text-xs font-semibold text-gray-500 mb-2">累積利益の内訳</p>
+            <p className="text-xs font-semibold text-gray-500 mb-2">累積利益の内訳（今月末まで日割りベース）</p>
             <div className="space-y-0.5 text-sm">
               {/* 収入 */}
               <div className="flex justify-between text-gray-500 text-xs font-medium pt-1">
                 <span>【収入】</span>
               </div>
+
               {/* 予約明細 */}
               {recovery.pastReservations.length > 0 ? (
-                <div className="pl-3 mt-1 mb-2">
-                  <table className="w-full text-xs">
+                <div className="pl-3 mt-1 mb-2 overflow-x-auto">
+                  <table className="w-full text-xs min-w-[500px]">
                     <thead>
                       <tr className="text-gray-400 border-b border-gray-100">
-                        <th className="text-left pb-1 font-medium">日程</th>
-                        <th className="text-left pb-1 font-medium">氏名</th>
-                        <th className="text-right pb-1 font-medium">宿泊料</th>
-                        <th className="text-right pb-1 font-medium">清掃料</th>
+                        <th className="text-left pb-1 font-medium pr-2">日程</th>
+                        <th className="text-left pb-1 font-medium pr-2">氏名</th>
+                        <th className="text-center pb-1 font-medium pr-2">状態</th>
+                        <th className="text-right pb-1 font-medium pr-2">宿泊料（今月末分）</th>
+                        <th className="text-right pb-1 font-medium pr-2">清掃料</th>
                         <th className="text-right pb-1 font-medium">清掃費</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {recovery.pastReservations.map(r => (
-                        <tr key={r.id} className="border-b border-gray-50">
-                          <td className="py-1 text-gray-500 whitespace-nowrap pr-2">
-                            {r.checkIn} 〜 {r.checkOut}
-                          </td>
-                          <td className="py-1 text-gray-700 pr-2">{r.guestName}</td>
-                          <td className="py-1 text-right text-blue-700">＋{formatCurrency(r.roomFee)}</td>
-                          <td className="py-1 text-right text-blue-700">＋{formatCurrency(r.cleaningFee)}</td>
-                          <td className="py-1 text-right text-red-400">－{formatCurrency(r.cleaningCost)}</td>
-                        </tr>
-                      ))}
+                      {recovery.pastReservations.map(r => {
+                        const badge = STATUS_BADGE[r.status]
+                        const isNotEarned = r.status === 'future'
+                        return (
+                          <tr key={r.id} className={`border-b border-gray-50 ${isNotEarned ? 'opacity-50' : ''}`}>
+                            <td className="py-1 text-gray-500 whitespace-nowrap pr-2">
+                              {r.checkIn} 〜 {r.checkOut}
+                            </td>
+                            <td className="py-1 text-gray-700 pr-2">{r.guestName}</td>
+                            <td className="py-1 pr-2 text-center">
+                              <span className={`inline-flex px-1.5 py-0.5 rounded-full text-[10px] font-medium ${badge.cls}`}>
+                                {badge.label}
+                              </span>
+                            </td>
+                            <td className="py-1 text-right pr-2">
+                              {isNotEarned ? (
+                                <span className="text-gray-300">—</span>
+                              ) : r.status === 'active' ? (
+                                <span className="text-blue-700">
+                                  ＋{formatCurrency(r.earnedRoomFee)}
+                                  <span className="text-gray-400 ml-1">/ {formatCurrency(r.roomFee)}</span>
+                                </span>
+                              ) : (
+                                <span className="text-blue-700">＋{formatCurrency(r.roomFee)}</span>
+                              )}
+                            </td>
+                            <td className="py-1 text-right text-blue-700 pr-2">
+                              {r.status === 'future' ? <span className="text-gray-300">—</span> : `＋${formatCurrency(r.cleaningFee)}`}
+                            </td>
+                            <td className="py-1 text-right text-red-400">
+                              {r.status === 'future' ? <span className="text-gray-300">—</span> : `－${formatCurrency(r.cleaningCost)}`}
+                            </td>
+                          </tr>
+                        )
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -242,8 +324,7 @@ export default function RoomSimulationPanel({ room, actualOccupancy, recovery }:
               </div>
               <div className="flex justify-between pl-3">
                 <span className="text-gray-600">
-                  光熱費
-                  <span className="text-xs text-gray-400 ml-1">（実績）</span>
+                  光熱費<span className="text-xs text-gray-400 ml-1">（実績）</span>
                 </span>
                 <span className={`font-medium ${recovery.accumulatedUtilityCost > 0 ? 'text-red-500' : 'text-gray-300'}`}>
                   {recovery.accumulatedUtilityCost > 0 ? `－${formatCurrency(recovery.accumulatedUtilityCost)}` : '未入力'}
@@ -260,9 +341,8 @@ export default function RoomSimulationPanel({ room, actualOccupancy, recovery }:
                 </span>
               </div>
 
-              {/* 累積利益 */}
               <div className={`flex justify-between font-bold pt-1 ${recovery.accumulatedProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                <span>累積利益</span>
+                <span>累積利益（今月末時点）</span>
                 <span>{formatCurrency(recovery.accumulatedProfit)}</span>
               </div>
             </div>
@@ -284,6 +364,7 @@ export default function RoomSimulationPanel({ room, actualOccupancy, recovery }:
             {OCC_OPTIONS.map(o => (
               <button
                 key={o}
+                type="button"
                 onClick={() => setOccupancy(o)}
                 className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
                   occupancy === o
@@ -353,11 +434,11 @@ export default function RoomSimulationPanel({ room, actualOccupancy, recovery }:
           </table>
         </div>
         <p className="text-xs text-gray-400 mt-2">
-          月次収入 = 月額 × 稼働率　残回収期間 = 残回収額 ÷ 月次利益
+          月次収入 = 月額 × 稼働率　残回収期間 = 残回収額（今月末時点）÷ 月次利益
         </p>
       </div>
 
-      {/* レコメンド（初期投資があり未回収の場合） */}
+      {/* レコメンド */}
       {recovery.initialCost > 0 && !isRecovered && (
         <div className="card border-amber-200 bg-amber-50/40">
           <h4 className="text-sm font-semibold text-gray-700 mb-1">目標回収期間から逆算するには</h4>
@@ -372,9 +453,7 @@ export default function RoomSimulationPanel({ room, actualOccupancy, recovery }:
                 <div
                   key={months}
                   className={`rounded-xl px-3 py-2.5 border ${
-                    isAchievable
-                      ? 'bg-emerald-50 border-emerald-200'
-                      : 'bg-white border-gray-200'
+                    isAchievable ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-gray-200'
                   }`}
                 >
                   <p className="text-xs text-gray-500 mb-1">{label}で回収</p>
@@ -392,7 +471,6 @@ export default function RoomSimulationPanel({ room, actualOccupancy, recovery }:
             })}
           </div>
 
-          {/* キャンペーン時の注意 */}
           {(() => {
             const campCalc = calc(room.price_campaign)
             if (campCalc.months === null || campCalc.months <= 0) return null
@@ -406,7 +484,6 @@ export default function RoomSimulationPanel({ room, actualOccupancy, recovery }:
                 <p className="text-gray-600 mt-1">
                   通常価格と比べて回収が <span className="font-semibold text-amber-600">{diff}ヶ月遅れます</span>（
                   通常: あと{normalCalc.months}ヶ月 → キャンペーン: あと{campCalc.months}ヶ月）。
-                  稼働率が上がった場合のみキャンペーン適用を推奨します。
                 </p>
               </div>
             )
@@ -414,11 +491,10 @@ export default function RoomSimulationPanel({ room, actualOccupancy, recovery }:
         </div>
       )}
 
-      {/* 回収済みメッセージ */}
       {isRecovered && (
         <div className="card bg-emerald-50 border-emerald-200 text-center py-5">
           <p className="text-2xl mb-1">🎉</p>
-          <p className="font-semibold text-emerald-700">初期投資を回収済みです</p>
+          <p className="font-semibold text-emerald-700">初期投資を回収済みです（今月末時点）</p>
           <p className="text-sm text-emerald-600 mt-0.5">
             累積利益 {formatCurrency(recovery.accumulatedProfit)} で
             初期投資 {formatCurrency(recovery.initialCost)} を超えました
