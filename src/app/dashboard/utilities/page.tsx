@@ -1,28 +1,45 @@
+import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import type { Room, UtilityCost } from '@/types'
 import { currentYearMonth, formatCurrency, roomDisplayName } from '@/lib/utils'
 import UtilityEditor from '@/components/utilities/UtilityEditor'
 import UtilityMonthNav from '@/components/utilities/UtilityMonthNav'
 import UtilityCsvImport from '@/components/utilities/UtilityCsvImport'
+import UtilityGridView from '@/components/utilities/UtilityGridView'
 
 export const dynamic = 'force-dynamic'
+
+function getGridMonths(utilityList: UtilityCost[], currentYM: string): string[] {
+  const months = new Set<string>()
+  const [cy, cm] = currentYM.split('-').map(Number)
+  for (let i = 0; i < 18; i++) {
+    const d = new Date(cy, cm - 1 - i, 1)
+    months.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+  }
+  for (const u of utilityList) months.add(u.year_month)
+  return Array.from(months).sort().reverse()
+}
 
 export default async function UtilitiesPage({
   searchParams,
 }: {
-  searchParams: { ym?: string }
+  searchParams: { ym?: string; view?: string }
 }) {
   const ym = searchParams.ym || currentYearMonth()
+  const view = searchParams.view === 'grid' ? 'grid' : 'monthly'
   const [year, month] = ym.split('-')
 
   const [{ data: rooms }, { data: utilities }] = await Promise.all([
     supabase.from('rooms').select('*').order('building_name').order('room_number'),
-    supabase.from('utility_costs').select('*').eq('year_month', ym),
+    supabase.from('utility_costs').select('*').order('year_month', { ascending: false }),
   ])
 
   const roomList = (rooms ?? []) as Room[]
-  const utilityList = (utilities ?? []) as UtilityCost[]
-  const utilityMap = Object.fromEntries(utilityList.map(u => [u.room_id, u]))
+  const allUtilities = (utilities ?? []) as UtilityCost[]
+
+  // 月別ビュー用
+  const monthlyUtilities = allUtilities.filter(u => u.year_month === ym)
+  const utilityMap = Object.fromEntries(monthlyUtilities.map(u => [u.room_id, u]))
 
   // 建物名でグループ化
   const buildings: Record<string, Room[]> = {}
@@ -31,6 +48,8 @@ export default async function UtilitiesPage({
     buildings[room.building_name].push(room)
   }
 
+  const gridMonths = getGridMonths(allUtilities, ym)
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -38,16 +57,42 @@ export default async function UtilitiesPage({
           <h2 className="text-2xl font-bold text-gray-900">光熱費入力</h2>
           <p className="text-sm text-gray-500 mt-0.5">建物・部屋別に月次の水道光熱費を登録</p>
         </div>
-        <div className="flex items-center gap-2">
-          <UtilityCsvImport rooms={roomList} yearMonth={ym} />
-          <UtilityMonthNav currentYM={ym} />
+        <div className="flex items-center gap-2 flex-wrap">
+          <UtilityCsvImport rooms={roomList} currentYM={ym} />
+          {view === 'monthly' && <UtilityMonthNav currentYM={ym} />}
         </div>
+      </div>
+
+      {/* タブ */}
+      <div className="flex gap-1 bg-gray-100 p-1 rounded-lg w-fit">
+        <Link
+          href={`/dashboard/utilities?ym=${ym}&view=monthly`}
+          className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
+            view === 'monthly'
+              ? 'bg-white text-gray-900 shadow-sm'
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          月別入力
+        </Link>
+        <Link
+          href={`/dashboard/utilities?ym=${ym}&view=grid`}
+          className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
+            view === 'grid'
+              ? 'bg-white text-gray-900 shadow-sm'
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          部屋×月 一覧
+        </Link>
       </div>
 
       {roomList.length === 0 ? (
         <div className="card text-center py-12">
           <p className="text-gray-500">部屋が登録されていません</p>
         </div>
+      ) : view === 'grid' ? (
+        <UtilityGridView rooms={roomList} allUtilities={allUtilities} months={gridMonths} />
       ) : (
         <div className="space-y-6">
           {Object.entries(buildings).map(([building, buildingRooms]) => {
