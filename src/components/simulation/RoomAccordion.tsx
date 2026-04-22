@@ -29,9 +29,7 @@ const emptyRecovery: RecoveryStats = {
 }
 
 export default function RoomAccordion({ rooms, occupancyByRoom, recoveryByRoom }: Props) {
-  const [expanded, setExpanded] = useState<Record<string, boolean>>(
-    rooms.length > 0 ? { [rooms[0].id]: true } : {}
-  )
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
 
   function toggle(id: string) {
     setExpanded(prev => ({ ...prev, [id]: !prev[id] }))

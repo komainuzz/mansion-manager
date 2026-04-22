@@ -3,6 +3,7 @@ import type { Room, UtilityCost } from '@/types'
 import { currentYearMonth, formatCurrency, roomDisplayName } from '@/lib/utils'
 import UtilityEditor from '@/components/utilities/UtilityEditor'
 import UtilityMonthNav from '@/components/utilities/UtilityMonthNav'
+import UtilityCsvImport from '@/components/utilities/UtilityCsvImport'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,7 +38,10 @@ export default async function UtilitiesPage({
           <h2 className="text-2xl font-bold text-gray-900">光熱費入力</h2>
           <p className="text-sm text-gray-500 mt-0.5">建物・部屋別に月次の水道光熱費を登録</p>
         </div>
-        <UtilityMonthNav currentYM={ym} />
+        <div className="flex items-center gap-2">
+          <UtilityCsvImport rooms={roomList} yearMonth={ym} />
+          <UtilityMonthNav currentYM={ym} />
+        </div>
       </div>
 
       {roomList.length === 0 ? (
