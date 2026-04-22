@@ -6,6 +6,15 @@ import { formatCurrency, sumCosts } from '@/lib/utils'
 
 export interface RecoveryStats {
   initialCost: number
+  // 収入内訳
+  roomFeeRevenue: number       // 宿泊料収入合計
+  cleaningFeeIncome: number    // 清掃料（ゲスト負担）収入合計
+  reservationCount: number     // 予約件数
+  // 支出内訳
+  accumulatedFixedCost: number    // 固定費累計（月次コスト×運用月数）
+  accumulatedUtilityCost: number  // 光熱費実績累計
+  accumulatedCleaningCost: number // 清掃費累計
+  // 計算値
   accumulatedProfit: number
   remainingRecovery: number
   operationMonths: number
@@ -132,7 +141,8 @@ export default function RoomSimulationPanel({ room, actualOccupancy, recovery }:
             )}
           </div>
 
-          <div className="grid grid-cols-3 gap-3 mb-3">
+          {/* サマリー3列 */}
+          <div className="grid grid-cols-3 gap-3 mb-4">
             <div>
               <p className="text-xs text-gray-500 mb-0.5">初期投資</p>
               <p className="text-sm font-semibold text-red-600">{formatCurrency(recovery.initialCost)}</p>
@@ -151,16 +161,86 @@ export default function RoomSimulationPanel({ room, actualOccupancy, recovery }:
             </div>
           </div>
 
-          <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
+          {/* 進捗バー */}
+          <div className="h-3 bg-gray-100 rounded-full overflow-hidden mb-1">
             <div
               className={`h-full rounded-full transition-all ${isRecovered ? 'bg-emerald-500' : 'bg-blue-500'}`}
               style={{ width: `${Math.max(1, recoveryPct)}%` }}
             />
           </div>
-          <p className="text-xs text-gray-400 mt-1 text-right">{recoveryPct}% 回収済み</p>
+          <p className="text-xs text-gray-400 text-right mb-4">{recoveryPct}% 回収済み</p>
+
+          {/* 累積利益の計算内訳 */}
+          <div className="border-t border-gray-100 pt-3">
+            <p className="text-xs font-semibold text-gray-500 mb-2">累積利益の内訳</p>
+            <div className="space-y-0.5 text-sm">
+              {/* 収入 */}
+              <div className="flex justify-between text-gray-500 text-xs font-medium pt-1">
+                <span>【収入】</span>
+              </div>
+              <div className="flex justify-between pl-3">
+                <span className="text-gray-600">
+                  宿泊料収入
+                  {recovery.reservationCount > 0 && (
+                    <span className="text-xs text-gray-400 ml-1">（{recovery.reservationCount}件）</span>
+                  )}
+                </span>
+                <span className="font-medium text-blue-700">＋{formatCurrency(recovery.roomFeeRevenue)}</span>
+              </div>
+              <div className="flex justify-between pl-3">
+                <span className="text-gray-600">清掃料収入</span>
+                <span className="font-medium text-blue-700">＋{formatCurrency(recovery.cleaningFeeIncome)}</span>
+              </div>
+              <div className="flex justify-between pl-3 text-xs text-gray-400 border-b border-gray-100 pb-2">
+                <span>収入合計</span>
+                <span className="font-semibold text-gray-700">{formatCurrency(recovery.roomFeeRevenue + recovery.cleaningFeeIncome)}</span>
+              </div>
+
+              {/* 支出 */}
+              <div className="flex justify-between text-gray-500 text-xs font-medium pt-1">
+                <span>【支出】</span>
+              </div>
+              <div className="flex justify-between pl-3">
+                <span className="text-gray-600">
+                  固定費
+                  {recovery.operationMonths > 0 && (
+                    <span className="text-xs text-gray-400 ml-1">
+                      （{formatCurrency(sumCosts(room.monthly_costs))}/月 × {recovery.operationMonths}ヶ月）
+                    </span>
+                  )}
+                </span>
+                <span className="font-medium text-red-500">－{formatCurrency(recovery.accumulatedFixedCost)}</span>
+              </div>
+              <div className="flex justify-between pl-3">
+                <span className="text-gray-600">
+                  光熱費
+                  <span className="text-xs text-gray-400 ml-1">（実績）</span>
+                </span>
+                <span className={`font-medium ${recovery.accumulatedUtilityCost > 0 ? 'text-red-500' : 'text-gray-300'}`}>
+                  {recovery.accumulatedUtilityCost > 0 ? `－${formatCurrency(recovery.accumulatedUtilityCost)}` : '未入力'}
+                </span>
+              </div>
+              <div className="flex justify-between pl-3">
+                <span className="text-gray-600">清掃費</span>
+                <span className="font-medium text-red-500">－{formatCurrency(recovery.accumulatedCleaningCost)}</span>
+              </div>
+              <div className="flex justify-between pl-3 text-xs text-gray-400 border-b border-gray-100 pb-2">
+                <span>支出合計</span>
+                <span className="font-semibold text-gray-700">
+                  {formatCurrency(recovery.accumulatedFixedCost + recovery.accumulatedUtilityCost + recovery.accumulatedCleaningCost)}
+                </span>
+              </div>
+
+              {/* 累積利益 */}
+              <div className={`flex justify-between font-bold pt-1 ${recovery.accumulatedProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                <span>累積利益</span>
+                <span>{formatCurrency(recovery.accumulatedProfit)}</span>
+              </div>
+            </div>
+          </div>
 
           {!recovery.hasOperationData && (
-            <p className="text-xs text-amber-600 mt-2 bg-amber-50 rounded-lg px-3 py-1.5">
+            <p className="text-xs text-amber-600 mt-3 bg-amber-50 rounded-lg px-3 py-1.5">
               予約データがまだありません。運用開始後に累積利益が反映されます。
             </p>
           )}

@@ -70,23 +70,29 @@ export default async function SimulationPage() {
       )
     }
 
-    // 累積収入・清掃費（過去の予約から）
-    const accumulatedRevenue = pastRes.reduce((s, r) => s + (r.room_fee || 0) + (r.cleaning_fee || 0), 0)
+    // 収入内訳
+    const roomFeeRevenue = pastRes.reduce((s, r) => s + (r.room_fee || 0), 0)
+    const cleaningFeeIncome = pastRes.reduce((s, r) => s + (r.cleaning_fee || 0), 0)
     const accumulatedCleaningCost = pastRes.reduce((s, r) => s + (r.cleaning_cost || 0), 0)
 
-    // 累積固定費（月次コスト × 運用月数）
+    // 支出内訳
     const accumulatedFixedCost = monthlyFixed * operationMonths
-
-    // 累積光熱費（実績）
     const accumulatedUtilityCost = utilityList
       .filter(u => u.room_id === room.id && u.year_month <= todayYM)
       .reduce((s, u) => s + (u.electricity || 0) + (u.water || 0), 0)
 
+    const accumulatedRevenue = roomFeeRevenue + cleaningFeeIncome
     const accumulatedProfit = accumulatedRevenue - accumulatedFixedCost - accumulatedUtilityCost - accumulatedCleaningCost
     const remainingRecovery = Math.max(0, initialCost - accumulatedProfit)
 
     recoveryByRoom[room.id] = {
       initialCost,
+      roomFeeRevenue,
+      cleaningFeeIncome,
+      reservationCount: pastRes.length,
+      accumulatedFixedCost,
+      accumulatedUtilityCost,
+      accumulatedCleaningCost,
       accumulatedProfit,
       remainingRecovery,
       operationMonths,

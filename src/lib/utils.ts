@@ -1,4 +1,4 @@
-import { format, parseISO, differenceInDays, getDaysInMonth, startOfMonth, endOfMonth, isWithinInterval, max, min } from 'date-fns'
+import { format, parseISO, differenceInDays, getDaysInMonth, startOfMonth, endOfMonth, isWithinInterval, max, min, addMonths } from 'date-fns'
 import { ja } from 'date-fns/locale'
 import type { Room, Reservation, UtilityCost, MonthlySummary } from '@/types'
 
@@ -64,18 +64,35 @@ function monthlyFixedCosts(rooms: Room[], yearMonth: string): number {
   return total
 }
 
-/** 指定月の予約収入（room_fee + cleaning_fee）と清掃費用（cleaning_cost）の合計 */
+/**
+ * 指定月の収益と清掃費用を計算する。
+ * 宿泊料は日割りで各月に按分（例: 4/1〜5/10の¥310,000 → 日額¥10,000×各月の滞在日数）。
+ * 清掃料（収入）・清掃費（コスト）はチェックイン月に一括計上。
+ */
 function monthlyReservationData(reservations: Reservation[], yearMonth: string) {
   const monthStart = startOfMonth(parseISO(yearMonth + '-01'))
-  const monthEnd = endOfMonth(monthStart)
+  const nextMonthStart = addMonths(monthStart, 1)
   let revenue = 0
   let cleaningCost = 0
 
   for (const r of reservations) {
     const ci = parseISO(r.check_in)
-    // check_inが指定月に含まれる予約を対象
-    if (isWithinInterval(ci, { start: monthStart, end: monthEnd })) {
-      revenue += (r.room_fee || 0) + (r.cleaning_fee || 0)
+    const co = parseISO(r.check_out)
+    const stayDays = differenceInDays(co, ci)
+    if (stayDays <= 0) continue
+
+    // 宿泊料：日割り按分（この月の滞在日数 × 日額）
+    const overlapStart = ci > monthStart ? ci : monthStart
+    const overlapEnd = co < nextMonthStart ? co : nextMonthStart
+    const overlapDays = differenceInDays(overlapEnd, overlapStart)
+    if (overlapDays > 0) {
+      const dailyRate = (r.room_fee || 0) / stayDays
+      revenue += Math.round(dailyRate * overlapDays)
+    }
+
+    // 清掃料収入・清掃費はチェックイン月に計上
+    if (ci >= monthStart && ci < nextMonthStart) {
+      revenue += r.cleaning_fee || 0
       cleaningCost += r.cleaning_cost || 0
     }
   }
