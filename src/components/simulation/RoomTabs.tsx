@@ -42,6 +42,13 @@ export default function RoomTabs({ rooms, occupancyByRoom, recoveryByRoom }: Pro
           actualOccupancy={occupancyByRoom[room.id] ?? 0}
           recovery={recoveryByRoom[room.id] ?? {
             initialCost: 0,
+            roomFeeRevenue: 0,
+            cleaningFeeIncome: 0,
+            reservationCount: 0,
+            pastReservations: [],
+            accumulatedFixedCost: 0,
+            accumulatedUtilityCost: 0,
+            accumulatedCleaningCost: 0,
             accumulatedProfit: 0,
             remainingRecovery: 0,
             operationMonths: 0,

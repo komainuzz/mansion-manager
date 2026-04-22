@@ -4,16 +4,27 @@ import { useState } from 'react'
 import type { Room } from '@/types'
 import { formatCurrency, sumCosts } from '@/lib/utils'
 
+export interface RecoveryReservation {
+  id: string
+  guestName: string
+  checkIn: string
+  checkOut: string
+  roomFee: number
+  cleaningFee: number
+  cleaningCost: number
+}
+
 export interface RecoveryStats {
   initialCost: number
   // 収入内訳
-  roomFeeRevenue: number       // 宿泊料収入合計
-  cleaningFeeIncome: number    // 清掃料（ゲスト負担）収入合計
-  reservationCount: number     // 予約件数
+  roomFeeRevenue: number
+  cleaningFeeIncome: number
+  reservationCount: number
+  pastReservations: RecoveryReservation[]
   // 支出内訳
-  accumulatedFixedCost: number    // 固定費累計（月次コスト×運用月数）
-  accumulatedUtilityCost: number  // 光熱費実績累計
-  accumulatedCleaningCost: number // 清掃費累計
+  accumulatedFixedCost: number
+  accumulatedUtilityCost: number
+  accumulatedCleaningCost: number
   // 計算値
   accumulatedProfit: number
   remainingRecovery: number
@@ -178,21 +189,39 @@ export default function RoomSimulationPanel({ room, actualOccupancy, recovery }:
               <div className="flex justify-between text-gray-500 text-xs font-medium pt-1">
                 <span>【収入】</span>
               </div>
-              <div className="flex justify-between pl-3">
-                <span className="text-gray-600">
-                  宿泊料収入
-                  {recovery.reservationCount > 0 && (
-                    <span className="text-xs text-gray-400 ml-1">（{recovery.reservationCount}件）</span>
-                  )}
-                </span>
-                <span className="font-medium text-blue-700">＋{formatCurrency(recovery.roomFeeRevenue)}</span>
-              </div>
-              <div className="flex justify-between pl-3">
-                <span className="text-gray-600">清掃料収入</span>
-                <span className="font-medium text-blue-700">＋{formatCurrency(recovery.cleaningFeeIncome)}</span>
-              </div>
+              {/* 予約明細 */}
+              {recovery.pastReservations.length > 0 ? (
+                <div className="pl-3 mt-1 mb-2">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="text-gray-400 border-b border-gray-100">
+                        <th className="text-left pb-1 font-medium">日程</th>
+                        <th className="text-left pb-1 font-medium">氏名</th>
+                        <th className="text-right pb-1 font-medium">宿泊料</th>
+                        <th className="text-right pb-1 font-medium">清掃料</th>
+                        <th className="text-right pb-1 font-medium">清掃費</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {recovery.pastReservations.map(r => (
+                        <tr key={r.id} className="border-b border-gray-50">
+                          <td className="py-1 text-gray-500 whitespace-nowrap pr-2">
+                            {r.checkIn} 〜 {r.checkOut}
+                          </td>
+                          <td className="py-1 text-gray-700 pr-2">{r.guestName}</td>
+                          <td className="py-1 text-right text-blue-700">＋{formatCurrency(r.roomFee)}</td>
+                          <td className="py-1 text-right text-blue-700">＋{formatCurrency(r.cleaningFee)}</td>
+                          <td className="py-1 text-right text-red-400">－{formatCurrency(r.cleaningCost)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="pl-3 text-xs text-gray-400 mb-2">予約なし</div>
+              )}
               <div className="flex justify-between pl-3 text-xs text-gray-400 border-b border-gray-100 pb-2">
-                <span>収入合計</span>
+                <span>収入合計（宿泊料＋清掃料）</span>
                 <span className="font-semibold text-gray-700">{formatCurrency(recovery.roomFeeRevenue + recovery.cleaningFeeIncome)}</span>
               </div>
 
