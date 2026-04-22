@@ -36,26 +36,24 @@ function priceHint(occ: number): { label: string; color: string } {
 }
 
 export default function RoomAccordion({ rooms, occupancyByRoom, recoveryByRoom }: Props) {
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(
-    new Set(rooms.slice(0, 1).map(r => r.id))
+  const [expandedIds, setExpandedIds] = useState<string[]>(
+    rooms.slice(0, 1).map(r => r.id)
   )
 
   if (rooms.length === 0) {
     return <p className="text-sm text-gray-400 text-center py-8">部屋が登録されていません</p>
   }
 
-  const allExpanded = expandedIds.size === rooms.length
+  const allExpanded = expandedIds.length === rooms.length
 
   function toggle(id: string) {
-    setExpandedIds(prev => {
-      const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
-      return next
-    })
+    setExpandedIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    )
   }
 
   function toggleAll() {
-    setExpandedIds(allExpanded ? new Set() : new Set(rooms.map(r => r.id)))
+    setExpandedIds(allExpanded ? [] : rooms.map(r => r.id))
   }
 
   return (
@@ -74,7 +72,7 @@ export default function RoomAccordion({ rooms, occupancyByRoom, recoveryByRoom }
 
       {rooms.map(room => {
         const stats = recoveryByRoom[room.id] ?? DEFAULT_STATS
-        const isExpanded = expandedIds.has(room.id)
+        const isExpanded = expandedIds.includes(room.id)
         const hasInitial = stats.initialCost > 0
         const isRecovered = hasInitial && stats.remainingRecovery <= 0
         const pct = hasInitial
