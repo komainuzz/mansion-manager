@@ -2,12 +2,13 @@ import { supabase } from '@/lib/supabase'
 import type { Room, Reservation, UtilityCost } from '@/types'
 import {
   currentYearMonth, sumCosts, getRecentMonths, isRoomActiveInMonth,
+  formatCurrency, roomDisplayName,
 } from '@/lib/utils'
 import {
   getDaysInMonth, startOfMonth, endOfMonth, differenceInDays,
   max as maxDate, min as minDate, parseISO,
 } from 'date-fns'
-import RoomTabs from '@/components/simulation/RoomTabs'
+import RoomAccordion from '@/components/simulation/RoomAccordion'
 import type { RecoveryStats } from '@/components/simulation/RoomSimulationPanel'
 
 export const dynamic = 'force-dynamic'
@@ -109,6 +110,27 @@ export default async function SimulationPage() {
     }
   }
 
+  // 価格設定ヒント（稼働率ベース）
+  const priceHints = roomList.map(room => {
+    const occ = Math.round((occupancyByRoom[room.id] ?? 0) * 100)
+    let suggestion = ''
+    let colorClass = ''
+    if (occ >= 85) {
+      suggestion = '需要旺盛。値上げ検討（+5〜15%）を推奨'
+      colorClass = 'text-emerald-600'
+    } else if (occ >= 60) {
+      suggestion = '適正稼働。現状維持が妥当'
+      colorClass = 'text-blue-600'
+    } else if (occ >= 30) {
+      suggestion = '稼働率低め。プロモーションや値下げを検討'
+      colorClass = 'text-amber-600'
+    } else {
+      suggestion = '稼働率が低い。価格・条件の見直しが必要'
+      colorClass = 'text-red-600'
+    }
+    return { room, occ, suggestion, colorClass }
+  })
+
   return (
     <div className="p-6 space-y-6">
       <div>
@@ -118,11 +140,57 @@ export default async function SimulationPage() {
         </p>
       </div>
 
-      <RoomTabs
+      <RoomAccordion
         rooms={roomList}
         occupancyByRoom={occupancyByRoom}
         recoveryByRoom={recoveryByRoom}
       />
+
+      {/* 価格設定ヒント */}
+      {priceHints.length > 0 && (
+        <div className="card overflow-hidden p-0">
+          <div className="px-5 py-4 border-b border-gray-100">
+            <h3 className="font-semibold text-gray-900">価格設定ヒント</h3>
+            <p className="text-xs text-gray-500 mt-0.5">過去6ヶ月の実績稼働率に基づく分析</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr>
+                  <th className="table-th">部屋名</th>
+                  <th className="table-th">現在の価格</th>
+                  <th className="table-th">平均稼働率</th>
+                  <th className="table-th">稼働率ゲージ</th>
+                  <th className="table-th">推奨アクション</th>
+                </tr>
+              </thead>
+              <tbody>
+                {priceHints.map(({ room, occ, suggestion, colorClass }) => (
+                  <tr key={room.id} className="hover:bg-gray-50">
+                    <td className="table-td font-medium text-gray-900">{roomDisplayName(room)}</td>
+                    <td className="table-td font-semibold text-blue-600 text-right">
+                      {formatCurrency(room.current_price)}/月
+                    </td>
+                    <td className="table-td text-right">
+                      <span className={`font-semibold ${
+                        occ >= 85 ? 'text-emerald-600' : occ >= 60 ? 'text-blue-600' : occ >= 30 ? 'text-amber-600' : 'text-red-600'
+                      }`}>{occ}%</span>
+                    </td>
+                    <td className="table-td">
+                      <div className="w-32 bg-gray-100 rounded-full h-2">
+                        <div className={`h-2 rounded-full transition-all ${
+                          occ >= 85 ? 'bg-emerald-500' : occ >= 60 ? 'bg-blue-500' : occ >= 30 ? 'bg-amber-500' : 'bg-red-500'
+                        }`} style={{ width: `${Math.min(occ, 100)}%` }} />
+                      </div>
+                    </td>
+                    <td className={`table-td text-sm font-medium ${colorClass}`}>{suggestion}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -35,7 +35,7 @@ export default async function ForecastPage() {
           過去6ヶ月の実績 + 今後6ヶ月の予測（既存予約ベース）
         </p>
       </div>
-      <SimulationChart summaries={summaries} rooms={roomList} />
+      <SimulationChart summaries={summaries} />
     </div>
   )
 }
