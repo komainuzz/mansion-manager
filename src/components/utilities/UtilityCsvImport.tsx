@@ -21,21 +21,75 @@ interface CsvRow {
   error: string | null
 }
 
+// RFC 4180準拠のCSVパーサー（クォート内改行・カンマに対応）
+function parseCSVToRows(text: string): string[][] {
+  const rows: string[][] = []
+  let i = 0
+  const n = text.length
+
+  while (i < n) {
+    const row: string[] = []
+
+    while (i < n) {
+      if (text[i] === '"') {
+        i++ // 開きクォートをスキップ
+        let field = ''
+        while (i < n) {
+          if (text[i] === '"') {
+            if (text[i + 1] === '"') { field += '"'; i += 2 } // エスケープされたクォート
+            else { i++; break } // 閉じクォート
+          } else {
+            field += text[i++]
+          }
+        }
+        row.push(field)
+      } else {
+        let field = ''
+        while (i < n && text[i] !== ',' && text[i] !== '\n' && text[i] !== '\r') {
+          field += text[i++]
+        }
+        row.push(field.trim())
+      }
+      if (text[i] === ',') { i++; continue }
+      break
+    }
+
+    if (text[i] === '\r') i++
+    if (text[i] === '\n') i++
+
+    if (row.some(c => c !== '')) rows.push(row)
+  }
+
+  return rows
+}
+
+// 金額文字列を数値に変換（¥・円・カンマ・スペースを除去）
+function parseAmount(raw: string): number | null | 'invalid' {
+  const s = raw.trim().replace(/[¥￥円,\s]/g, '')
+  if (!s) return null
+  const n = Number(s)
+  return isNaN(n) ? 'invalid' : n
+}
+
 function parseCSV(text: string, rooms: Room[]): CsvRow[] {
-  const lines = text.trim().split(/\r?\n/)
-  if (lines.length < 2) return []
-  const dataLines = /年月|year/i.test(lines[0]) ? lines.slice(1) : lines
-  return dataLines.filter(l => l.trim()).map(line => {
-    const cols = line.split(',')
+  const allRows = parseCSVToRows(text)
+  if (allRows.length < 2) return []
+
+  const isHeader = /年月|year/i.test(allRows[0][0] ?? '')
+  const dataRows = isHeader ? allRows.slice(1) : allRows
+
+  return dataRows.map(cols => {
     const yearMonth = (cols[0] ?? '').trim()
     const buildingName = (cols[1] ?? '').trim()
     const roomNumber = (cols[2] ?? '').trim()
-    const electricityRaw = (cols[3] ?? '').trim()
-    const waterRaw = (cols[4] ?? '').trim()
+    const electricityRaw = cols[3] ?? ''
+    const waterRaw = cols[4] ?? ''
     const memo = (cols[5] ?? '').trim()
 
-    const electricity = electricityRaw !== '' ? Number(electricityRaw) : null
-    const water = waterRaw !== '' ? Number(waterRaw) : null
+    const electricityResult = parseAmount(electricityRaw)
+    const waterResult = parseAmount(waterRaw)
+    const electricity = electricityResult === 'invalid' ? null : electricityResult
+    const water = waterResult === 'invalid' ? null : waterResult
 
     let matchedRoomId: string | null = null
     let error: string | null = null
@@ -49,15 +103,12 @@ function parseCSV(text: string, rooms: Room[]): CsvRow[] {
         r.building_name === buildingName &&
         (r.room_number ?? '') === roomNumber
       )
-      if (match) {
-        matchedRoomId = match.id
-      } else {
-        error = '部屋が見つかりません'
-      }
+      if (match) matchedRoomId = match.id
+      else error = '部屋が見つかりません'
     }
 
-    if (electricity !== null && isNaN(electricity)) error = '電気代が数値ではありません'
-    if (water !== null && isNaN(water)) error = '水道代が数値ではありません'
+    if (electricityResult === 'invalid') error = '電気代が数値ではありません'
+    if (waterResult === 'invalid') error = '水道代が数値ではありません'
 
     return { yearMonth, buildingName, roomNumber, electricity, water, memo, matchedRoomId, error }
   })
