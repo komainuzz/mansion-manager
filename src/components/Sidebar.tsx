@@ -9,15 +9,17 @@ import {
   CalendarDays,
   CalendarRange,
   TrendingUp,
+  BarChart2,
   ShieldCheck,
 } from 'lucide-react'
 
-const NAV = [
-  { href: '/dashboard',              label: '概要',             Icon: LayoutDashboard },
-  { href: '/dashboard/rooms',        label: '部屋管理',         Icon: Building2 },
-  { href: '/dashboard/reservations', label: '予約管理',         Icon: CalendarDays },
-  { href: '/dashboard/calendar',     label: '稼働カレンダー',   Icon: CalendarRange },
-  { href: '/dashboard/simulation',   label: 'シミュレーション', Icon: TrendingUp },
+const NAV: { href: string; label: string; Icon: React.ElementType; sub?: boolean }[] = [
+  { href: '/dashboard',                         label: '概要',           Icon: LayoutDashboard },
+  { href: '/dashboard/rooms',                   label: '部屋管理',       Icon: Building2 },
+  { href: '/dashboard/reservations',            label: '予約管理',       Icon: CalendarDays },
+  { href: '/dashboard/calendar',                label: '稼働カレンダー', Icon: CalendarRange },
+  { href: '/dashboard/simulation',              label: '投資回収',       Icon: TrendingUp },
+  { href: '/dashboard/simulation/forecast',     label: '収支予測',       Icon: BarChart2, sub: true },
 ]
 
 interface Props {
@@ -36,22 +38,25 @@ export default function Sidebar({ userEmail, isAdmin }: Props) {
       </div>
 
       <nav className="flex-1 py-4 space-y-0.5 px-2">
-        {NAV.map(({ href, label, Icon }) => {
+        {NAV.map(({ href, label, Icon, sub }) => {
           const active =
             href === '/dashboard'
               ? pathname === '/dashboard'
-              : pathname.startsWith(href)
+              : href === '/dashboard/simulation'
+                ? pathname === '/dashboard/simulation'
+                : pathname.startsWith(href)
           return (
             <Link
               key={href}
               href={href}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
+              className={`flex items-center gap-3 rounded-lg text-sm font-medium transition-colors
+                ${sub ? 'ml-4 px-3 py-2' : 'px-3 py-2.5'}
                 ${active
                   ? 'bg-blue-600 text-white'
                   : 'text-slate-300 hover:bg-slate-800 hover:text-white'
                 }`}
             >
-              <Icon size={16} />
+              <Icon size={sub ? 14 : 16} />
               {label}
             </Link>
           )

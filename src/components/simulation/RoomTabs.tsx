@@ -3,14 +3,15 @@
 import { useState } from 'react'
 import type { Room } from '@/types'
 import { roomDisplayName } from '@/lib/utils'
-import RoomSimulationPanel from './RoomSimulationPanel'
+import RoomSimulationPanel, { type RecoveryStats } from './RoomSimulationPanel'
 
 interface Props {
   rooms: Room[]
-  occupancyByRoom: Record<string, number> // roomId -> 0-1
+  occupancyByRoom: Record<string, number>
+  recoveryByRoom: Record<string, RecoveryStats>
 }
 
-export default function RoomTabs({ rooms, occupancyByRoom }: Props) {
+export default function RoomTabs({ rooms, occupancyByRoom, recoveryByRoom }: Props) {
   const [selectedId, setSelectedId] = useState(rooms[0]?.id ?? '')
   const room = rooms.find(r => r.id === selectedId)
 
@@ -39,6 +40,13 @@ export default function RoomTabs({ rooms, occupancyByRoom }: Props) {
         <RoomSimulationPanel
           room={room}
           actualOccupancy={occupancyByRoom[room.id] ?? 0}
+          recovery={recoveryByRoom[room.id] ?? {
+            initialCost: 0,
+            accumulatedProfit: 0,
+            remainingRecovery: 0,
+            operationMonths: 0,
+            hasOperationData: false,
+          }}
         />
       )}
     </div>
