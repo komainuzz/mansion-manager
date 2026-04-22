@@ -27,6 +27,14 @@ const DEFAULT_STATS: RecoveryStats = {
   hasOperationData: false,
 }
 
+function priceHint(occ: number): { label: string; color: string } {
+  if (occ >= 85) return { label: '値上げ検討', color: 'bg-emerald-100 text-emerald-700' }
+  if (occ >= 60) return { label: '適正稼働',   color: 'bg-blue-100 text-blue-700' }
+  if (occ >= 30) return { label: '稼働率低め', color: 'bg-amber-100 text-amber-700' }
+  if (occ > 0)   return { label: '要見直し',   color: 'bg-red-100 text-red-600' }
+  return           { label: 'データなし',   color: 'bg-gray-100 text-gray-500' }
+}
+
 export default function RoomAccordion({ rooms, occupancyByRoom, recoveryByRoom }: Props) {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(
     new Set(rooms.slice(0, 1).map(r => r.id))
@@ -55,6 +63,7 @@ export default function RoomAccordion({ rooms, occupancyByRoom, recoveryByRoom }
       {/* 全展開/折りたたみ */}
       <div className="flex justify-end">
         <button
+          type="button"
           onClick={toggleAll}
           className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 transition-colors"
         >
@@ -71,25 +80,30 @@ export default function RoomAccordion({ rooms, occupancyByRoom, recoveryByRoom }
         const pct = hasInitial
           ? Math.min(100, Math.max(0, Math.round((stats.accumulatedProfit / stats.initialCost) * 100)))
           : 0
+        const occ = Math.round((occupancyByRoom[room.id] ?? 0) * 100)
+        const hint = priceHint(occ)
 
         return (
           <div key={room.id} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
             {/* ヘッダー（常時表示） */}
             <button
+              type="button"
               onClick={() => toggle(room.id)}
-              className="w-full px-5 py-4 flex items-center gap-4 hover:bg-gray-50 transition-colors text-left"
+              className="w-full px-5 py-4 flex items-center gap-4 hover:bg-gray-50 active:bg-gray-100 transition-colors text-left cursor-pointer"
             >
               {/* 部屋名 + バッジ */}
-              <div className="w-36 shrink-0">
+              <div className="w-40 shrink-0">
                 <p className="font-semibold text-gray-900 truncate">{roomDisplayName(room)}</p>
-                {isRecovered && (
-                  <span className="inline-block mt-0.5 text-xs px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded-full font-medium">
-                    回収済み ✓
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {isRecovered && (
+                    <span className="text-xs px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded-full font-medium">
+                      回収済み ✓
+                    </span>
+                  )}
+                  <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${hint.color}`}>
+                    {occ > 0 ? `実績${occ}% ` : ''}{hint.label}
                   </span>
-                )}
-                {!hasInitial && (
-                  <span className="text-xs text-gray-400">初期投資未登録</span>
-                )}
+                </div>
               </div>
 
               {/* 進捗バー + % */}
@@ -108,7 +122,7 @@ export default function RoomAccordion({ rooms, occupancyByRoom, recoveryByRoom }
                     </div>
                   </div>
                 ) : (
-                  <div className="h-2.5 bg-gray-100 rounded-full" />
+                  <p className="text-xs text-gray-400">初期投資未登録</p>
                 )}
               </div>
 
