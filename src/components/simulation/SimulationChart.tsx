@@ -4,11 +4,12 @@ import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   Legend, ResponsiveContainer, ReferenceLine, Cell,
 } from 'recharts'
-import type { MonthlySummary } from '@/types'
-import { formatCurrency, formatYearMonth } from '@/lib/utils'
+import type { MonthlySummary, Room } from '@/types'
+import { formatCurrency, formatYearMonth, roomDisplayName } from '@/lib/utils'
 
 interface Props {
   summaries: MonthlySummary[]
+  rooms: Room[]
 }
 
 function formatYM(ym: string) {
@@ -32,23 +33,51 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   )
 }
 
-export default function SimulationChart({ summaries }: Props) {
+export default function SimulationChart({ summaries, rooms }: Props) {
   const chartData = summaries.map(s => ({
     name: formatYM(s.yearMonth),
     収入: s.revenue,
     費用: s.costs,
     利益: s.profit,
     isForecast: s.isForecast,
+    yearMonth: s.yearMonth,
+    occupancyRate: s.occupancyRate,
   }))
 
+  // 累計損益
   let cumulative = 0
   const cumulativeData = summaries.map(s => {
     cumulative += s.profit
     return { name: formatYM(s.yearMonth), 累計損益: cumulative, isForecast: s.isForecast }
   })
 
+  // 価格設定ヒント
+  const hints = rooms.map(room => {
+    const roomSummaries = summaries.filter(s => !s.isForecast)
+    const avgOccupancy = roomSummaries.length > 0
+      ? roomSummaries.reduce((sum, s) => sum + s.occupancyRate, 0) / roomSummaries.length
+      : 0
+    const occ = Math.round(avgOccupancy * 100)
+    let suggestion = ''
+    let suggestionClass = ''
+    if (occ >= 85) {
+      suggestion = '需要旺盛。値上げ検討（+5〜15%）を推奨'
+      suggestionClass = 'text-emerald-600'
+    } else if (occ >= 60) {
+      suggestion = '適正稼働。現状維持が妥当'
+      suggestionClass = 'text-blue-600'
+    } else if (occ >= 30) {
+      suggestion = '稼働率低め。プロモーションや値下げを検討'
+      suggestionClass = 'text-amber-600'
+    } else {
+      suggestion = '稼働率が低い。価格・条件の見直しが必要'
+      suggestionClass = 'text-red-600'
+    }
+    return { room, occ, suggestion, suggestionClass }
+  })
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* 月次損益グラフ */}
       <div className="card">
         <h3 className="font-semibold text-gray-900 mb-1">月次損益（実績 + 予測）</h3>
@@ -100,45 +129,89 @@ export default function SimulationChart({ summaries }: Props) {
         </ResponsiveContainer>
       </div>
 
+      {/* 価格設定ヒント */}
+      <div className="card overflow-hidden p-0">
+        <div className="px-5 py-4 border-b border-gray-100">
+          <h3 className="font-semibold text-gray-900">価格設定ヒント</h3>
+          <p className="text-xs text-gray-500 mt-0.5">実績データに基づく稼働率分析</p>
+        </div>
+        {hints.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-8">部屋が登録されていません</p>
+        ) : (
+          <table className="w-full">
+            <thead>
+              <tr>
+                <th className="table-th">部屋名</th>
+                <th className="table-th">現在の価格</th>
+                <th className="table-th">平均稼働率</th>
+                <th className="table-th">稼働率ゲージ</th>
+                <th className="table-th">推奨アクション</th>
+              </tr>
+            </thead>
+            <tbody>
+              {hints.map(({ room, occ, suggestion, suggestionClass }) => (
+                <tr key={room.id} className="hover:bg-gray-50">
+                  <td className="table-td font-medium text-gray-900">{roomDisplayName(room)}</td>
+                  <td className="table-td font-semibold text-blue-600">
+                    {formatCurrency(room.current_price)}/月
+                  </td>
+                  <td className="table-td">
+                    <span className={`font-semibold ${
+                      occ >= 85 ? 'text-emerald-600' : occ >= 60 ? 'text-blue-600' : occ >= 30 ? 'text-amber-600' : 'text-red-600'
+                    }`}>{occ}%</span>
+                  </td>
+                  <td className="table-td">
+                    <div className="w-32 bg-gray-100 rounded-full h-2">
+                      <div className={`h-2 rounded-full transition-all ${
+                        occ >= 85 ? 'bg-emerald-500' : occ >= 60 ? 'bg-blue-500' : occ >= 30 ? 'bg-amber-500' : 'bg-red-500'
+                      }`} style={{ width: `${Math.min(occ, 100)}%` }} />
+                    </div>
+                  </td>
+                  <td className={`table-td text-sm font-medium ${suggestionClass}`}>{suggestion}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
       {/* 月次サマリーテーブル */}
       <div className="card overflow-hidden p-0">
         <div className="px-5 py-4 border-b border-gray-100">
           <h3 className="font-semibold text-gray-900">月次サマリー一覧</h3>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-gray-50 text-xs text-gray-500 font-semibold">
-                <th className="px-4 py-3 text-left">月</th>
-                <th className="px-4 py-3 text-right">収入</th>
-                <th className="px-4 py-3 text-right">費用</th>
-                <th className="px-4 py-3 text-right">利益</th>
-                <th className="px-4 py-3 text-right">稼働率</th>
-                <th className="px-4 py-3 text-left">種別</th>
+        <table className="w-full">
+          <thead>
+            <tr>
+              <th className="table-th">月</th>
+              <th className="table-th">収入</th>
+              <th className="table-th">費用</th>
+              <th className="table-th">利益</th>
+              <th className="table-th">稼働率</th>
+              <th className="table-th">種別</th>
+            </tr>
+          </thead>
+          <tbody>
+            {summaries.map(s => (
+              <tr key={s.yearMonth} className={`hover:bg-gray-50 ${s.isForecast ? 'opacity-70' : ''}`}>
+                <td className="table-td font-medium">{formatYearMonth(s.yearMonth)}</td>
+                <td className="table-td text-emerald-600 font-medium">{formatCurrency(s.revenue)}</td>
+                <td className="table-td text-red-500">{formatCurrency(s.costs)}</td>
+                <td className={`table-td font-semibold ${s.profit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                  {formatCurrency(s.profit)}
+                </td>
+                <td className="table-td">{Math.round(s.occupancyRate * 100)}%</td>
+                <td className="table-td">
+                  <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
+                    s.isForecast ? 'bg-violet-100 text-violet-700' : 'bg-gray-100 text-gray-600'
+                  }`}>
+                    {s.isForecast ? '予測' : '実績'}
+                  </span>
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {summaries.map(s => (
-                <tr key={s.yearMonth} className={`border-t border-gray-100 hover:bg-gray-50 ${s.isForecast ? 'opacity-70' : ''}`}>
-                  <td className="px-4 py-3 font-medium text-gray-700">{formatYearMonth(s.yearMonth)}</td>
-                  <td className="px-4 py-3 text-right text-emerald-600 font-medium">{formatCurrency(s.revenue)}</td>
-                  <td className="px-4 py-3 text-right text-red-500">{formatCurrency(s.costs)}</td>
-                  <td className={`px-4 py-3 text-right font-semibold ${s.profit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                    {formatCurrency(s.profit)}
-                  </td>
-                  <td className="px-4 py-3 text-right text-gray-600">{Math.round(s.occupancyRate * 100)}%</td>
-                  <td className="px-4 py-3">
-                    <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
-                      s.isForecast ? 'bg-violet-100 text-violet-700' : 'bg-gray-100 text-gray-600'
-                    }`}>
-                      {s.isForecast ? '予測' : '実績'}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   )
