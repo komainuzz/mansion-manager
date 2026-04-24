@@ -85,7 +85,70 @@ function computeScenario(
     : 0
   const cutoffDisplay = format(cutoffInclusive, 'yyyy/M/d', { locale: ja })
 
-  return { label, cutoffDisplay, accumulatedRevenue, accumulatedProfit, remainingRecovery, recoveryPct }
+  return { label, cutoffDisplay, cutoffYM, accumulatedRevenue, accumulatedProfit, remainingRecovery, recoveryPct }
+}
+
+// ────────────────────────────────────────────────
+// 月末時点の累積利益（月次差分計算に使用）
+function profitAtMonthEnd(
+  room: Room,
+  roomRes: Reservation[],
+  utilityList: UtilityCost[],
+  monthEnd: Date,
+): number {
+  const cutoffExclusive = addDays(monthEnd, 1)
+  const ym = format(monthEnd, 'yyyy-MM')
+  const { roomFeeRevenue, cleaningFeeIncome, cleaningCost } = revenueUpTo(roomRes, cutoffExclusive)
+  const fixedCost = fixedCostUpTo(room, monthEnd)
+  const utilityCost = utilityList
+    .filter(u => u.room_id === room.id && u.year_month <= ym)
+    .reduce((s, u) => s + (u.electricity || 0) + (u.water || 0), 0)
+  return roomFeeRevenue + cleaningFeeIncome - fixedCost - utilityCost - cleaningCost
+}
+
+// 確定予約データで累積利益が initialCost を超える最初の月
+function findConfirmedRecoveryYM(
+  room: Room,
+  roomRes: Reservation[],
+  utilityList: UtilityCost[],
+  initialCost: number,
+): string | null {
+  if (initialCost <= 0 || !room.contract_start) return null
+  const start = startOfMonth(parseISO(room.contract_start))
+  const limit = addMonths(start, 180) // 最大15年
+  let cursor = start
+  while (cursor <= limit) {
+    const monthEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0)
+    if (profitAtMonthEnd(room, roomRes, utilityList, monthEnd) >= initialCost) {
+      return format(monthEnd, 'yyyy-MM')
+    }
+    cursor = addMonths(cursor, 1)
+  }
+  return null
+}
+
+// 直近 N ヶ月の月次利益の平均
+function avgMonthlyProfitLast(
+  room: Room,
+  roomRes: Reservation[],
+  utilityList: UtilityCost[],
+  now: Date,
+  months = 3,
+): number | null {
+  const monthly: number[] = []
+  for (let i = 1; i <= months; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    const ym = format(d, 'yyyy-MM')
+    if (!isRoomActiveInMonth(room, ym)) continue
+    const thisEnd = new Date(d.getFullYear(), d.getMonth() + 1, 0)
+    const prevEnd = new Date(d.getFullYear(), d.getMonth(), 0)
+    monthly.push(
+      profitAtMonthEnd(room, roomRes, utilityList, thisEnd) -
+      profitAtMonthEnd(room, roomRes, utilityList, prevEnd),
+    )
+  }
+  if (monthly.length === 0) return null
+  return monthly.reduce((a, b) => a + b, 0) / monthly.length
 }
 
 // ────────────────────────────────────────────────
@@ -217,6 +280,17 @@ export default async function SimulationPage() {
       }
     }).sort((a, b) => b.checkIn.localeCompare(a.checkIn))
 
+    // 回収タイミング計算
+    const confirmedRecoveryYM = findConfirmedRecoveryYM(room, roomRes, utilityList, initialCost)
+    const avgProfit = avgMonthlyProfitLast(room, roomRes, utilityList, now)
+
+    let actualPaceRecoveryYM: string | null = null
+    if (remainingRecovery <= 0) {
+      actualPaceRecoveryYM = todayYM
+    } else if (avgProfit !== null && avgProfit > 0) {
+      actualPaceRecoveryYM = format(addMonths(now, Math.ceil(remainingRecovery / avgProfit)), 'yyyy-MM')
+    }
+
     recoveryByRoom[room.id] = {
       initialCost,
       roomFeeRevenue,
@@ -231,6 +305,10 @@ export default async function SimulationPage() {
       operationMonths,
       hasOperationData: roomRes.length > 0,
       scenarios,
+      finalCheckoutYM: format(finalCheckoutDate, 'yyyy-MM'),
+      confirmedRecoveryYM,
+      actualPaceMonthlyProfit: avgProfit,
+      actualPaceRecoveryYM,
     }
   }
 

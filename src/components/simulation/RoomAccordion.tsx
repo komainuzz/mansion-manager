@@ -26,6 +26,10 @@ const emptyRecovery: RecoveryStats = {
   operationMonths: 0,
   hasOperationData: false,
   scenarios: [],
+  finalCheckoutYM: null,
+  confirmedRecoveryYM: null,
+  actualPaceMonthlyProfit: null,
+  actualPaceRecoveryYM: null,
 }
 
 export default function RoomAccordion({ rooms, occupancyByRoom, recoveryByRoom }: Props) {
@@ -46,8 +50,10 @@ export default function RoomAccordion({ rooms, occupancyByRoom, recoveryByRoom }
         const recovery = recoveryByRoom[room.id] ?? emptyRecovery
         const occ = Math.round((occupancyByRoom[room.id] ?? 0) * 100)
         const isRecovered = recovery.initialCost > 0 && recovery.remainingRecovery <= 0
+        // 最終退去日シナリオ（scenarios[1]）をプログレスバーの基準にする
+        const finalScenario = recovery.scenarios[1] ?? recovery.scenarios[0]
         const recoveryPct = recovery.initialCost > 0
-          ? Math.min(100, Math.round((recovery.accumulatedProfit / recovery.initialCost) * 100))
+          ? (finalScenario ? Math.min(100, Math.max(0, finalScenario.recoveryPct)) : Math.min(100, Math.round((recovery.accumulatedProfit / recovery.initialCost) * 100)))
           : null
 
         return (
@@ -88,7 +94,7 @@ export default function RoomAccordion({ rooms, occupancyByRoom, recoveryByRoom }
                     <span className="text-xs text-gray-400 whitespace-nowrap">
                       {isRecovered
                         ? '回収済み'
-                        : `${recoveryPct}% 回収済み｜残 ${formatCurrency(recovery.remainingRecovery)}`
+                        : `${recoveryPct}% 回収済み（退去予定まで）｜残 ${formatCurrency(finalScenario?.remainingRecovery ?? recovery.remainingRecovery)}`
                       }
                     </span>
                   </div>
